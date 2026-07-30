@@ -1,5 +1,39 @@
+modules = ["nodejs-20"]
 [nix]
 channel = "stable-25_05"
 
 [agent]
 expertMode = true
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start Web (dev)"
+
+[[workflows.workflow]]
+name = "Start Web (dev)"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev:web"
+waitForPort = 3000
+
+[userenv]
+
+[userenv.shared]
+NEXTAUTH_URL = "http://localhost:3000"
+NEXT_PUBLIC_API_URL = "http://localhost:4000/api"
+NEXT_PUBLIC_APP_URL = "http://localhost:3000"
+NODE_ENV = "development"
+
+[[ports]]
+localPort = 3000
+externalPort = 80

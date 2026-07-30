@@ -49,16 +49,17 @@ router.get("/wishlist", async (req: AuthRequest, res, next) => {
 
 router.post("/wishlist/:productId", async (req: AuthRequest, res, next) => {
   try {
+    const productId = req.params.productId as string;
     const item = await prisma.wishlistItem.upsert({
       where: {
         userId_productId: {
           userId: req.user!.id,
-          productId: req.params.productId,
+          productId,
         },
       },
       create: {
         userId: req.user!.id,
-        productId: req.params.productId,
+        productId,
       },
       update: {},
     });
@@ -71,7 +72,7 @@ router.post("/wishlist/:productId", async (req: AuthRequest, res, next) => {
 router.delete("/wishlist/:productId", async (req: AuthRequest, res, next) => {
   try {
     await prisma.wishlistItem.deleteMany({
-      where: { userId: req.user!.id, productId: req.params.productId },
+      where: { userId: req.user!.id, productId: req.params.productId as string },
     });
     res.json({ success: true });
   } catch (err) {

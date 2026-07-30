@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+apps/api/dist/
+apps/web/.next/
+
+# Environment files (never commit real secrets)
+apps/api/.env
+apps/web/.env.local
+apps/web/.env.production.local
+.env
+.env.local
+.env.*.local
+
+# Prisma generated client (regenerated on deploy)
+apps/api/node_modules/.prisma/
+
+# Logs
+*.log
+apps/api/logs/
+apps/web/logs/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+
+# Next.js
+apps/web/next-env.d.ts
+
+# Lock file (keep package-lock.json for reproducible installs)
+# package-lock.json  ← intentionally tracked

@@ -98,7 +98,7 @@ router.post("/checkout", requireAuth, async (req: AuthRequest, res, next) => {
 router.post("/confirm/:orderId", requireAuth, async (req: AuthRequest, res, next) => {
   try {
     const order = await prisma.order.findFirst({
-      where: { id: req.params.orderId, userId: req.user!.id },
+      where: { id: req.params.orderId as string, userId: req.user!.id },
       include: { items: true },
     });
     if (!order) throw new AppError("Order not found", 404);

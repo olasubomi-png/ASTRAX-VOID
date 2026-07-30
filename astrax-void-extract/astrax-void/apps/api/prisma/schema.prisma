@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  PAYSTACK
+  FLUTTERWAVE
+  STRIPE
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED
+}
+
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  email         String    @unique
+  username      String    @unique
+  passwordHash  String?
+  avatar        String?
+  role          Role      @default(USER)
+  googleId      String?
+  discordId     String?
+  walletBalance Float     @default(0)
+  referralCode  String?   @unique
+  referredBy    String?   @db.ObjectId
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  orders        Order[]
+  reviews       Review[]
+  wishlist      WishlistItem[]
+  downloadLogs  DownloadLog[]
+  supportTickets SupportTicket[]
+}
+
+model Category {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  slug        String    @unique
+  name        String
+  description String?
+  icon        String?
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products    Product[]
+}
+
+model Product {
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  slug             String    @unique
+  name             String
+  description      String
+  shortDescription String?
+  price            Float
+  salePrice        Float?
+  currency         String    @default("USD")
+  categoryId       String    @db.ObjectId
+  images           String[]
+  videoUrl         String?
+  features         String[]
+  requirements     String[]
+  stock            Int?      // null = unlimited
+  rating           Float     @default(0)
+  reviewCount      Int       @default(0)
+  isFeatured       Boolean   @default(false)
+  isTrending       Boolean   @default(false)
+  isActive         Boolean   @default(true)
+  tags             String[]
+  fileKey          String?   // R2 object key for digital file
+  downloadLimit    Int       @default(5)
+  linkExpiryHours  Int       @default(72)
+  version          String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  category         Category  @relation(fields: [categoryId], references: [id])
+  reviews          Review[]
+  wishlistItems    WishlistItem[]
+  orderItems       OrderItem[]
+}
+
+model Order {
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String        @db.ObjectId
+  total         Float
+  currency      String        @default("USD")
+  status        OrderStatus   @default(PENDING)
+  paymentMethod PaymentMethod?
+  paymentRef    String?
+  couponCode    String?
+  discount      Float         @default(0)
+  invoiceUrl    String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id])
+  items         OrderItem[]
+}
+
+model OrderItem {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  orderId      String    @db.ObjectId
+  productId    String    @db.ObjectId
+  name         String
+  price        Float
+  quantity     Int       @default(1)
+  downloadUrl  String?
+  licenseKey   String?
+  expiresAt    DateTime?
+  downloadCount Int      @default(0)
+
+  order        Order     @relation(fields: [orderId], references: [id])
+  product      Product   @relation(fields: [productId], references: [id])
+}
+
+model Review {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  productId String   @db.ObjectId
+  userId    String   @db.ObjectId
+  rating    Int
+  comment   String
+  isApproved Boolean @default(true)
+  createdAt DateTime @default(now())
+
+  product   Product  @relation(fields: [productId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model WishlistItem {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  productId String   @db.ObjectId
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id])
+
+  @@unique([userId, productId])
+}
+
+model Coupon {
+  id        String     @id @default(auto()) @map("_id") @db.ObjectId
+  code      String     @unique
+  type      CouponType
+  value     Float
+  minAmount Float?
+  maxUses   Int?
+  usedCount Int        @default(0)
+  expiresAt DateTime?
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+}
+
+model DownloadLog {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  orderItemId String
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model SupportTicket {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  subject   String
+  message   String
+  status    String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  priority  String   @default("MEDIUM")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model NewsletterSubscriber {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model SiteSetting {
+  id    String @id @default(auto()) @map("_id") @db.ObjectId
+  key   String @unique
+  value String
+}

@@ -1,177 +1,243 @@
-# ASTRAX-VOID — Ubuntu AWS Deployment Guide
+# ASTRAX-VOID — Production Deployment Guide
 
-## Prerequisites
+## Architecture
 
-- Ubuntu 22.04 LTS EC2 instance (t3.small or larger recommended)
-- Domain name pointed to your server's IP
-- MongoDB Atlas (or self-hosted MongoDB 7)
-- Redis (Upstash free tier or self-hosted Redis 7)
-- Port 80 and 443 open in your AWS Security Group
+```
+Internet → Nginx (80/443) → Next.js :3000  (PM2: astrax-web)
+                          → Express  :4000  (PM2: astrax-api)
+```
+
+MongoDB Atlas and Redis are external services — they are NOT hosted on the same machine.
 
 ---
 
-## Quick Deploy (automated)
+## Prerequisites
+
+| Tool | Version | Install |
+|------|---------|---------|
+| Ubuntu | 22.04 LTS | AWS EC2 |
+| Node.js | 20 LTS | via nodesource |
+| PM2 | latest | `npm i -g pm2` |
+| Nginx | latest | `apt install nginx` |
+| Git | latest | `apt install git` |
+
+---
+
+## Quick Start (fresh server)
 
 ```bash
-git clone https://github.com/olasubomi-png/ASTRAX-VOID.git /var/www/astrax-void
-cd /var/www/astrax-void
 chmod +x deploy/deploy.sh
 sudo bash deploy/deploy.sh
 ```
 
+The script will pause and prompt you to fill in `.env` files before building.
+
 ---
 
-## Manual Step-by-Step
+## Deployment Checklist — Secrets You Must Provide
 
-### 1. Install Node.js 20
+### `apps/api/.env`  (copy from `apps/api/.env.example`)
+
+#### ✅ REQUIRED — the API will refuse to start without these
+
+| Variable | How to get it |
+|----------|---------------|
+| `DATABASE_URL` | MongoDB Atlas → Connect → Drivers → copy connection string. Replace `<password>` and `<dbname>` (`astrax-void`). |
+| `JWT_SECRET` | Generate: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` |
+
+#### ⚙️ CONFIGURE — must match your domain
+
+| Variable | Value |
+|----------|-------|
+| `NODE_ENV` | `production` |
+| `PORT` | `4000` |
+| `APP_URL` | `https://astraxvoid.com` |
+| `API_URL` | `https://astraxvoid.com` |
+
+#### 🔌 OPTIONAL — leave blank to disable the feature
+
+| Variable | Feature |
+|----------|---------|
+| `REDIS_URL` | Session caching, rate limiting (Upstash free tier works) |
+| `JWT_EXPIRES_IN` | Default `7d` |
+| `GOOGLE_CLIENT_ID` / `_SECRET` | Google OAuth login |
+| `DISCORD_CLIENT_ID` / `_SECRET` | Discord OAuth login |
+| `PAYSTACK_SECRET_KEY` / `_PUBLIC_KEY` | Paystack payments |
+| `FLUTTERWAVE_SECRET_KEY` / `_PUBLIC_KEY` | Flutterwave payments |
+| `STRIPE_SECRET_KEY` | Stripe payments |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook verification |
+| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Cloudflare R2 file storage |
+| `R2_BUCKET_NAME` | Default `astrax-void` |
+| `R2_PUBLIC_URL` | Your R2 public bucket URL |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Outgoing email |
+| `EMAIL_FROM` | Sender address shown in emails |
+
+---
+
+### `apps/web/.env.local`  (copy from `apps/web/.env.example`)
+
+> **Important:** `NEXT_PUBLIC_*` variables are embedded at **build time**.  
+> Set them correctly **before** running `npm run build`.
+
+#### ✅ REQUIRED
+
+| Variable | Value |
+|----------|-------|
+| `NEXT_PUBLIC_API_URL` | `https://astraxvoid.com/api` |
+| `NEXT_PUBLIC_APP_URL` | `https://astraxvoid.com` |
+| `NEXTAUTH_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `NEXTAUTH_URL` | `https://astraxvoid.com` |
+
+#### 🔌 OPTIONAL
+
+| Variable | Feature |
+|----------|---------|
+| `GOOGLE_CLIENT_ID` / `_SECRET` | Google OAuth |
+| `DISCORD_CLIENT_ID` / `_SECRET` | Discord OAuth |
+| `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY` | Paystack checkout button |
+| `NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY` | Flutterwave checkout button |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe checkout button |
+
+---
+
+## Manual Step-by-Step (if not using deploy.sh)
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
-```
-
-### 2. Install PM2 and Nginx
-
-```bash
-sudo npm install -g pm2
-sudo apt-get install -y nginx certbot python3-certbot-nginx
-```
-
-### 3. Clone the repo
-
-```bash
+# 1. Clone
 git clone https://github.com/olasubomi-png/ASTRAX-VOID.git /var/www/astrax-void
 cd /var/www/astrax-void
-```
 
-### 4. Configure environment variables
-
-**API (`apps/api/.env`):**
-```bash
+# 2. Environment files
 cp apps/api/.env.example apps/api/.env
-nano apps/api/.env
-```
+nano apps/api/.env          # fill in DATABASE_URL + JWT_SECRET at minimum
 
-Fill in at minimum:
-- `DATABASE_URL` — your MongoDB connection string
-- `REDIS_URL` — your Redis URL
-- `JWT_SECRET` — a long random string (32+ chars)
-- `APP_URL` — your production frontend URL (e.g. `https://astraxvoid.com`)
-- `API_URL` — your production API URL (e.g. `https://astraxvoid.com`)
-
-**Frontend (`apps/web/.env.local`):**
-```bash
 cp apps/web/.env.example apps/web/.env.local
-nano apps/web/.env.local
-```
+nano apps/web/.env.local    # fill in all REQUIRED vars
 
-Fill in:
-- `NEXT_PUBLIC_API_URL=https://astraxvoid.com/api`
-- `NEXT_PUBLIC_APP_URL=https://astraxvoid.com`
-- `NEXTAUTH_SECRET` — same long random string
-- `NEXTAUTH_URL=https://astraxvoid.com`
-
-### 5. Install dependencies & build
-
-```bash
+# 3. Install + build
+# postinstall automatically runs `prisma generate`
 npm install
-npm run build
-```
+npm run build               # API: prisma generate + tsc | Web: next build
 
-### 6. Database setup (first deploy only)
+# 4. Seed the database (first deploy only)
+npm run db:seed --workspace=apps/api
 
-```bash
-npm run db:generate
-npm run db:push
-npm run db:seed     # optional — adds demo categories, products & admin user
-```
+# 5. Create log directory
+mkdir -p /var/www/astrax-void/logs
 
-Default admin: `admin@astraxvoid.com` / `admin123` — **change password immediately in production**.
-
-### 7. Nginx configuration
-
-```bash
-sudo cp deploy/nginx.conf /etc/nginx/sites-available/astrax-void
-# Edit the server_name to your domain:
-sudo nano /etc/nginx/sites-available/astrax-void
-
-sudo ln -s /etc/nginx/sites-available/astrax-void /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-### 8. SSL with Let's Encrypt
-
-```bash
-sudo certbot --nginx -d astraxvoid.com -d www.astraxvoid.com
-# Certbot auto-updates the Nginx config with SSL paths
-sudo systemctl reload nginx
-```
-
-### 9. Start with PM2
-
-```bash
-mkdir -p apps/api/logs apps/web/logs
+# 6. Start with PM2
 pm2 start ecosystem.config.js --env production
 pm2 save
-pm2 startup
-# Follow the command pm2 outputs to enable auto-start on reboot
+pm2 startup                 # follow the printed command to enable autostart
+
+# 7. Nginx
+cp deploy/nginx.conf /etc/nginx/sites-available/astrax-void
+ln -sf /etc/nginx/sites-available/astrax-void /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+nginx -t && systemctl reload nginx
+
+# 8. SSL
+certbot --nginx -d astraxvoid.com -d www.astraxvoid.com
 ```
 
 ---
 
-## Updating (future deploys)
+## Redeploy (update running app)
 
 ```bash
 cd /var/www/astrax-void
 git pull origin main
-npm install
-npm run build
-pm2 reload ecosystem.config.js --env production
+npm install                 # picks up any new packages
+npm run build               # rebuilds both apps
+pm2 reload ecosystem.config.js --env production   # zero-downtime reload
 ```
 
 ---
 
-## Useful commands
+## Nginx Routing
 
-| Command | Description |
-|---------|-------------|
-| `pm2 status` | See all running processes |
-| `pm2 logs` | Tail all logs |
-| `pm2 logs astrax-api` | API logs only |
-| `pm2 logs astrax-web` | Frontend logs only |
-| `pm2 restart astrax-api` | Restart API |
-| `pm2 restart astrax-web` | Restart frontend |
-| `sudo systemctl status nginx` | Nginx status |
-| `sudo nginx -t` | Test Nginx config |
+| Request path | Proxied to |
+|---|---|
+| `/api/*` | Express API on `:4000` with 20 req/s rate limit |
+| `/api/auth/*` | Express API on `:4000` with 5 req/min stricter limit |
+| `/health` | Express API on `:4000` (no rate limit) |
+| `/_next/static/*` | Next.js on `:3000` with 1-year immutable cache |
+| `/*` | Next.js on `:3000` |
 
 ---
 
-## Architecture on the server
+## Useful Commands
 
-```
-Internet
-   │
-   ▼
-Nginx (80/443) — SSL termination, rate limiting, security headers
-   ├── /api/*      → Express API  (127.0.0.1:4000) via PM2
-   └── /*          → Next.js      (127.0.0.1:3000) via PM2
-        │
-        ├── MongoDB Atlas (DATABASE_URL)
-        ├── Redis / Upstash (REDIS_URL)
-        └── Cloudflare R2 (optional, for digital file storage)
+```bash
+pm2 status                          # app health
+pm2 logs                            # tail all logs
+pm2 logs astrax-api --lines 100     # API logs
+pm2 logs astrax-web --lines 100     # Web logs
+pm2 restart astrax-api              # restart API only
+pm2 restart astrax-web              # restart web only
+
+# Check API is running
+curl http://localhost:4000/health
+
+# Check web is running
+curl -I http://localhost:3000
+
+# Nginx
+nginx -t                            # test config
+systemctl reload nginx              # reload without downtime
+tail -f /var/log/nginx/astrax-error.log
 ```
 
 ---
 
-## Security checklist before going live
+## MongoDB Atlas Setup
 
-- [ ] Change `JWT_SECRET` to a 64-char random string
-- [ ] Change `NEXTAUTH_SECRET` to a different 64-char random string
-- [ ] Change the seeded admin password (`admin123`)
-- [ ] Restrict MongoDB Atlas IP whitelist to your server's IP
-- [ ] Enable AWS Security Group: only 80, 443, and 22 (SSH) inbound
-- [ ] Configure Redis `requirepass` or use Upstash with auth URL
-- [ ] Set `NODE_ENV=production` in both `.env` files
-- [ ] Review and set Paystack/Flutterwave/Stripe webhook secrets
+1. Create a free cluster at https://cloud.mongodb.com
+2. **Database Access** → Add user with read/write on `astrax-void`
+3. **Network Access** → Add your AWS EC2 IP (or `0.0.0.0/0` temporarily)
+4. **Connect** → Drivers → copy the connection string
+5. Paste into `DATABASE_URL` in `apps/api/.env`
+
+After first deploy, seed the DB:
+```bash
+cd /var/www/astrax-void
+npm run db:seed --workspace=apps/api
+```
+
+---
+
+## Firewall (UFW)
+
+```bash
+ufw allow OpenSSH
+ufw allow 'Nginx Full'    # ports 80 + 443
+ufw enable
+# Do NOT expose ports 3000 or 4000 directly — Nginx proxies them
+```
+
+---
+
+## Troubleshooting
+
+### API exits immediately
+```bash
+pm2 logs astrax-api --lines 50
+```
+Common causes:
+- `DATABASE_URL` or `JWT_SECRET` missing from `apps/api/.env`
+- MongoDB Atlas IP whitelist not set
+- `prisma generate` not run — rebuild with `npm run build`
+
+### Web shows 502 Bad Gateway
+```bash
+pm2 status          # is astrax-web running?
+curl http://localhost:3000   # is Next.js responding?
+```
+
+### Prisma errors on startup
+```bash
+cd /var/www/astrax-void/apps/api
+npx prisma generate     # regenerate client
+cd /var/www/astrax-void
+pm2 restart astrax-api
+```

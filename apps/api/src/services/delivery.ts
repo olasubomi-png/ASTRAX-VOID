@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/prisma.js";
 
 /**
  * Generate secure download link + optional license key

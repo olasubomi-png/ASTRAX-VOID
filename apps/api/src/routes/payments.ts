@@ -1,12 +1,10 @@
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 import { requireAuth, AuthRequest } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { deliverDigitalProduct } from "../services/delivery.js";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/prisma.js";
 const router = Router();
 
 const checkoutSchema = z.object({

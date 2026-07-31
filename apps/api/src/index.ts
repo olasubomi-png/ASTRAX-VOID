@@ -10,7 +10,7 @@ dotenv.config();
 // ── Startup validation ────────────────────────────────────────────────────────
 // Check required env vars before importing Prisma (which throws if DATABASE_URL
 // is missing) so PM2 logs a clear message instead of a cryptic crash.
-const REQUIRED_ENV = ["DATABASE_URL", "JWT_SECRET"] as const;
+const REQUIRED_ENV = ["DATABASE_URL", "JWT_SECRET", "CORS_ORIGIN"] as const;
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
 if (missing.length > 0) {
   console.error("\n❌ ASTRAX-VOID API cannot start — missing required environment variables:");
@@ -36,7 +36,7 @@ const PORT = Number(process.env.PORT) || 4000;
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.APP_URL || "http://localhost:3000",
+    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
     credentials: true,
   })
 );
@@ -96,7 +96,7 @@ async function start() {
   app.listen(PORT, () => {
     console.log(`🚀 ASTRAX-VOID API running on http://localhost:${PORT}`);
     console.log(`   NODE_ENV : ${process.env.NODE_ENV || "development"}`);
-    console.log(`   CORS     : ${process.env.APP_URL || "http://localhost:3000"}`);
+    console.log(`   CORS     : ${process.env.CORS_ORIGIN || "http://localhost:3000"}`);
   });
 }
 

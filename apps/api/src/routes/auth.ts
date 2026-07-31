@@ -21,11 +21,13 @@ const loginSchema = z.object({
 });
 
 function signToken(user: { id: string; email: string; role: string }) {
-  const expiresIn = (process.env.JWT_EXPIRES_IN || "7d") as import("jsonwebtoken").SignOptions["expiresIn"];
+  const opts: jwt.SignOptions = {
+    expiresIn: (process.env.JWT_EXPIRES_IN || "7d") as jwt.SignOptions["expiresIn"],
+  };
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role },
     process.env.JWT_SECRET!,
-    { expiresIn }
+    opts
   );
 }
 

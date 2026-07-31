@@ -35,7 +35,10 @@ router.post("/checkout", requireAuth, async (req: AuthRequest, res, next) => {
 
     let total = 0;
     const orderItemsData = data.items.map((item) => {
-      const product = products.find((p) => p.id === item.productId)!;
+      const product = products.find(
+        (p: { id: string; salePrice: number | null; price: number; name: string }) =>
+          p.id === item.productId
+      )!;
       const price = product.salePrice ?? product.price;
       total += price * item.quantity;
       return {

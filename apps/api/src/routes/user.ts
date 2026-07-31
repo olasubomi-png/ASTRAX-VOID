@@ -20,7 +20,9 @@ router.get("/downloads", async (req: AuthRequest, res, next) => {
       orderBy: { createdAt: "desc" },
     });
 
-    const downloads = orders.flatMap((o) =>
+    const downloads = (
+      orders as Array<{ id: string; createdAt: Date; items: Record<string, unknown>[] }>
+    ).flatMap((o) =>
       o.items.map((item) => ({
         ...item,
         orderId: o.id,

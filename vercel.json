@@ -2,8 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "framework": "nextjs",
-  "installCommand": "npm install",
-  "buildCommand": "npm run build --workspace=apps/web",
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm --filter @astrax-void/web build",
   "outputDirectory": "apps/web/.next",
   "ignoreCommand": "git diff HEAD^ HEAD --quiet -- apps/web packages/shared"
 }

@@ -3,10 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "description": "ASTRAX-VOID — Premium Cyberpunk Gaming Digital Marketplace",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "packageManager": "pnpm@10.26.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma",
+      "sharp",
+      "unrs-resolver"
+    ]
+  },
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=apps/web\" \"npm run dev --workspace=apps/api\"",
     "dev:web": "npm run dev --workspace=apps/web",
@@ -25,7 +32,8 @@
     "typescript": "^5.9.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "pnpm": ">=10"
   },
   "author": "ASTRAX-VOID Team",
   "license": "UNLICENSED",

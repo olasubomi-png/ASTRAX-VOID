@@ -33,120 +33,120 @@ enum CouponType {
 }
 
 model User {
-  id            String    @id @default(auto()) @map("_id") @db.ObjectId
-  email         String    @unique
-  username      String    @unique
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  email         String   @unique
+  username      String   @unique
   passwordHash  String?
   avatar        String?
-  role          Role      @default(USER)
+  role          Role     @default(USER)
   googleId      String?
   discordId     String?
-  walletBalance Float     @default(0)
-  referralCode  String?   @unique
-  referredBy    String?   @db.ObjectId
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  walletBalance Float    @default(0)
+  referralCode  String?  @unique
+  referredBy    String?  @db.ObjectId
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  orders        Order[]
-  reviews       Review[]
-  wishlist      WishlistItem[]
-  downloadLogs  DownloadLog[]
+  orders         Order[]
+  reviews        Review[]
+  wishlist       WishlistItem[]
+  downloadLogs   DownloadLog[]
   supportTickets SupportTicket[]
 }
 
 model Category {
-  id          String    @id @default(auto()) @map("_id") @db.ObjectId
-  slug        String    @unique
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  slug        String   @unique
   name        String
   description String?
   icon        String?
-  sortOrder   Int       @default(0)
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  products    Product[]
+  products Product[]
 }
 
 model Product {
-  id               String    @id @default(auto()) @map("_id") @db.ObjectId
-  slug             String    @unique
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  slug             String   @unique
   name             String
   description      String
   shortDescription String?
   price            Float
   salePrice        Float?
-  currency         String    @default("USD")
-  categoryId       String    @db.ObjectId
+  currency         String   @default("USD")
+  categoryId       String   @db.ObjectId
   images           String[]
   videoUrl         String?
   features         String[]
   requirements     String[]
-  stock            Int?      // null = unlimited
-  rating           Float     @default(0)
-  reviewCount      Int       @default(0)
-  isFeatured       Boolean   @default(false)
-  isTrending       Boolean   @default(false)
-  isActive         Boolean   @default(true)
+  stock            Int? // null = unlimited
+  rating           Float    @default(0)
+  reviewCount      Int      @default(0)
+  isFeatured       Boolean  @default(false)
+  isTrending       Boolean  @default(false)
+  isActive         Boolean  @default(true)
   tags             String[]
-  fileKey          String?   // R2 object key for digital file
-  downloadLimit    Int       @default(5)
-  linkExpiryHours  Int       @default(72)
+  fileKey          String? // R2 object key for digital file
+  downloadLimit    Int      @default(5)
+  linkExpiryHours  Int      @default(72)
   version          String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  category         Category  @relation(fields: [categoryId], references: [id])
-  reviews          Review[]
-  wishlistItems    WishlistItem[]
-  orderItems       OrderItem[]
+  category      Category       @relation(fields: [categoryId], references: [id])
+  reviews       Review[]
+  wishlistItems WishlistItem[]
+  orderItems    OrderItem[]
 }
 
 model Order {
-  id            String        @id @default(auto()) @map("_id") @db.ObjectId
-  userId        String        @db.ObjectId
+  id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String         @db.ObjectId
   total         Float
-  currency      String        @default("USD")
-  status        OrderStatus   @default(PENDING)
+  currency      String         @default("USD")
+  status        OrderStatus    @default(PENDING)
   paymentMethod PaymentMethod?
   paymentRef    String?
   couponCode    String?
-  discount      Float         @default(0)
+  discount      Float          @default(0)
   invoiceUrl    String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
-  user          User          @relation(fields: [userId], references: [id])
-  items         OrderItem[]
+  user  User        @relation(fields: [userId], references: [id])
+  items OrderItem[]
 }
 
 model OrderItem {
-  id           String    @id @default(auto()) @map("_id") @db.ObjectId
-  orderId      String    @db.ObjectId
-  productId    String    @db.ObjectId
-  name         String
-  price        Float
-  quantity     Int       @default(1)
-  downloadUrl  String?
-  licenseKey   String?
-  expiresAt    DateTime?
-  downloadCount Int      @default(0)
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  orderId       String    @db.ObjectId
+  productId     String    @db.ObjectId
+  name          String
+  price         Float
+  quantity      Int       @default(1)
+  downloadUrl   String?
+  licenseKey    String?
+  expiresAt     DateTime?
+  downloadCount Int       @default(0)
 
-  order        Order     @relation(fields: [orderId], references: [id])
-  product      Product   @relation(fields: [productId], references: [id])
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
 }
 
 model Review {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  productId String   @db.ObjectId
-  userId    String   @db.ObjectId
-  rating    Int
-  comment   String
-  isApproved Boolean @default(true)
-  createdAt DateTime @default(now())
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  productId  String   @db.ObjectId
+  userId     String   @db.ObjectId
+  rating     Int
+  comment    String
+  isApproved Boolean  @default(true)
+  createdAt  DateTime @default(now())
 
-  product   Product  @relation(fields: [productId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
 }
 
 model WishlistItem {
@@ -155,8 +155,8 @@ model WishlistItem {
   productId String   @db.ObjectId
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
-  product   Product  @relation(fields: [productId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
 
   @@unique([userId, productId])
 }
@@ -175,14 +175,14 @@ model Coupon {
 }
 
 model DownloadLog {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String   @db.ObjectId
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
   orderItemId String
-  ip        String?
-  userAgent String?
-  createdAt DateTime @default(now())
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 model SupportTicket {
@@ -195,7 +195,7 @@ model SupportTicket {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 model NewsletterSubscriber {

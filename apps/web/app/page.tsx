@@ -1,7 +1,8 @@
 import { Hero } from "@/components/home/Hero";
-import { FeaturedProducts } from "@/components/home/FeaturedProducts";
-import { Categories } from "@/components/home/Categories";
 import { Stats } from "@/components/home/Stats";
+import { GamesShowcase } from "@/components/home/GamesShowcase";
+import { Categories } from "@/components/home/Categories";
+import { FeaturedProducts } from "@/components/home/FeaturedProducts";
 import { HowItWorks } from "@/components/home/HowItWorks";
 import { Testimonials } from "@/components/home/Testimonials";
 import { DiscordCTA } from "@/components/home/DiscordCTA";
@@ -13,6 +14,7 @@ export default function HomePage() {
     <>
       <Hero />
       <Stats />
+      <GamesShowcase />
       <Categories />
       <FeaturedProducts />
       <HowItWorks />

@@ -1,9 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  LayoutDashboard,
   Package,
   ShoppingBag,
   Users,
@@ -11,14 +11,17 @@ import {
   Settings,
   DollarSign,
   TrendingUp,
+  Loader2,
 } from "lucide-react";
+import { api } from "@/lib/api";
+import { formatPrice } from "@/lib/utils";
 
-const stats = [
-  { label: "Revenue", value: "$12,480", icon: DollarSign, change: "+18%" },
-  { label: "Orders", value: "342", icon: ShoppingBag, change: "+12%" },
-  { label: "Customers", value: "1,890", icon: Users, change: "+8%" },
-  { label: "Products", value: "24", icon: Package, change: "+2" },
-];
+interface AdminStats {
+  users: number;
+  orders: number;
+  products: number;
+  revenue: number;
+}
 
 const links = [
   { href: "/admin/products", icon: Package, label: "Products" },
@@ -29,6 +32,57 @@ const links = [
 ];
 
 export default function AdminPage() {
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await api.get<{ success: boolean; stats: AdminStats }>("/admin/stats");
+        if (!cancelled) setStats(res.stats);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load stats");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const cards = [
+    {
+      label: "Revenue",
+      value: stats ? formatPrice(stats.revenue) : "—",
+      icon: DollarSign,
+    },
+    {
+      label: "Orders",
+      value: stats ? stats.orders.toLocaleString() : "—",
+      icon: ShoppingBag,
+    },
+    {
+      label: "Customers",
+      value: stats ? stats.users.toLocaleString() : "—",
+      icon: Users,
+    },
+    {
+      label: "Products",
+      value: stats ? stats.products.toLocaleString() : "—",
+      icon: Package,
+    },
+  ];
+
   return (
     <div className="section-padding">
       <div className="container-max">
@@ -39,9 +93,14 @@ export default function AdminPage() {
           <p className="text-muted-foreground">Manage your marketplace</p>
         </div>
 
-        {/* Stats */}
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            {error}
+          </div>
+        )}
+
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
-          {stats.map((s, i) => (
+          {cards.map((s, i) => (
             <motion.div
               key={s.label}
               initial={{ opacity: 0, y: 15 }}
@@ -53,9 +112,13 @@ export default function AdminPage() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 border border-primary/20">
                   <s.icon className="h-5 w-5 text-primary" />
                 </div>
-                <span className="text-xs text-green-400 flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3" /> {s.change}
-                </span>
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <span className="text-xs text-green-400 flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3" /> Live
+                  </span>
+                )}
               </div>
               <p className="text-2xl font-bold">{s.value}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
@@ -63,7 +126,6 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {/* Quick links */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {links.map((l, i) => (
             <motion.div

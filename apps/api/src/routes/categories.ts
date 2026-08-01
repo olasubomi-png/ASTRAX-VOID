@@ -74,7 +74,7 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const category = await prisma.category.update({
       where: {
-        id: req.params.id,
+        id: String(req.params.id),
       },
       data: req.body,
     });
@@ -93,7 +93,7 @@ router.delete("/:id", requireAuth, requireAdmin, async (req, res, next) => {
   try {
     await prisma.category.delete({
       where: {
-        id: req.params.id,
+        id: String(req.params.id),
       },
     });
 

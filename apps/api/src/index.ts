@@ -29,6 +29,7 @@ import { adminRoutes } from "./routes/admin.js";
 import { userRoutes } from "./routes/user.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { searchRoutes } from "./routes/search.js";
+import { categoryRoutes } from "./routes/categories.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -79,6 +80,7 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/search", searchRoutes);
+app.use("/api/categories", categoryRoutes);
 
 // Error handler
 app.use(errorHandler);

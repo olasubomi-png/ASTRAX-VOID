@@ -37,7 +37,21 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   });
 
   if (!res.ok) {
-    const message = await res.text().catch(() => res.statusText);
+    // Try JSON first (structured error from our API), then fall back to a
+    // plain status description — never include raw HTML in the error message.
+    let message: string;
+    try {
+      const ct = res.headers.get("content-type") ?? "";
+      if (ct.includes("application/json")) {
+        const json = (await res.json()) as { message?: string; error?: string };
+        message = json.message ?? json.error ?? res.statusText;
+      } else {
+        // Server returned non-JSON (HTML 404, proxy error, etc.) — ignore body
+        message = res.statusText || `HTTP ${res.status}`;
+      }
+    } catch {
+      message = res.statusText || `HTTP ${res.status}`;
+    }
     throw new Error(`API ${res.status}: ${message}`);
   }
 

@@ -12,6 +12,8 @@ import {
   DollarSign,
   TrendingUp,
   Loader2,
+  RefreshCw,
+  ServerCrash,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
@@ -94,8 +96,33 @@ export default function AdminPage() {
         </div>
 
         {error && (
-          <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-            {error}
+          <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 flex items-start gap-3">
+            <ServerCrash className="h-5 w-5 text-red-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-red-400">Unable to reach server</p>
+              <p className="text-xs text-red-400/70 mt-0.5">
+                Stats could not be loaded. Check that the API is reachable and try again.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setError(null);
+                setLoading(true);
+                api
+                  .get<{ success: boolean; stats: AdminStats }>("/admin/stats")
+                  .then((res) => setStats(res.stats))
+                  .catch((err: unknown) =>
+                    setError(
+                      err instanceof Error ? err.message : "Failed to load stats"
+                    )
+                  )
+                  .finally(() => setLoading(false));
+              }}
+              className="shrink-0 flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20 transition-colors"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Retry
+            </button>
           </div>
         )}
 

@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import type { Product } from "@/types";
 import { toast } from "sonner";
-import { CATEGORIES } from "@/lib/constants";
+import { GAMES, RESOURCE_TYPES, CATEGORIES } from "@/lib/constants";
 
 interface ApiProduct extends Omit<Product, "category"> {
   category?: { name: string; slug: string } | null;
@@ -38,6 +38,7 @@ interface ProductForm {
   name: string;
   description: string;
   shortDescription: string;
+  gameSlug: string;
   categorySlug: string;
   imageUrl: string;
   fileUrl: string;
@@ -51,6 +52,7 @@ const EMPTY_FORM: ProductForm = {
   name: "",
   description: "",
   shortDescription: "",
+  gameSlug: "",
   categorySlug: "",
   imageUrl: "",
   fileUrl: "",
@@ -67,7 +69,8 @@ function formToPayload(f: ProductForm) {
     description: f.description.trim(),
     shortDescription: f.shortDescription.trim() || undefined,
     slug: baseSlug || `product-${Date.now()}`,
-    // categorySlug is resolved to categoryId on the API
+    // game first, then resource category
+    gameSlug: f.gameSlug.trim() || undefined,
     categorySlug: f.categorySlug.trim() || undefined,
     images: f.imageUrl ? [f.imageUrl.trim()] : [],
     fileKey: f.fileUrl.trim() || undefined,
@@ -302,7 +305,25 @@ function ProductModal({
           </div>
 
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Category</label>
+            <label className="text-xs text-muted-foreground mb-1 block">Game *</label>
+            <div className="relative">
+              <select
+                className="w-full appearance-none rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary pr-8"
+                value={form.gameSlug}
+                onChange={(e) => set("gameSlug", e.target.value)}
+                required
+              >
+                <option value="">Select game…</option>
+                {GAMES.map((g) => (
+                  <option key={g.slug} value={g.slug}>{g.name}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Resource type *</label>
             <div className="relative">
               <select
                 className="w-full appearance-none rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary pr-8"
@@ -310,8 +331,8 @@ function ProductModal({
                 onChange={(e) => set("categorySlug", e.target.value)}
                 required
               >
-                <option value="">Select category…</option>
-                {CATEGORIES.map((c) => (
+                <option value="">e.g. Android Resources, iOS Resources…</option>
+                {RESOURCE_TYPES.map((c) => (
                   <option key={c.slug} value={c.slug}>{c.name}</option>
                 ))}
               </select>
@@ -491,8 +512,12 @@ export default function AdminProductsPage() {
   useEffect(() => { load(); }, [load]);
 
   const handleAdd = async (form: ProductForm) => {
+    if (!form.gameSlug.trim()) {
+      toast.error("Please select a game");
+      return;
+    }
     if (!form.categorySlug.trim()) {
-      toast.error("Please select a category");
+      toast.error("Please select a resource type (Android, iOS, …)");
       return;
     }
     const payload = formToPayload(form);
@@ -510,8 +535,12 @@ export default function AdminProductsPage() {
 
   const handleEdit = async (form: ProductForm) => {
     if (!editProduct) return;
+    if (!form.gameSlug.trim()) {
+      toast.error("Please select a game");
+      return;
+    }
     if (!form.categorySlug.trim()) {
-      toast.error("Please select a category");
+      toast.error("Please select a resource type (Android, iOS, …)");
       return;
     }
     const payload = formToPayload(form);
@@ -545,6 +574,7 @@ export default function AdminProductsPage() {
     name: p.name ?? "",
     description: p.description ?? "",
     shortDescription: p.shortDescription ?? "",
+    gameSlug: (p as any).gameSlug ?? "",
     categorySlug: p.category?.slug ?? "",
     imageUrl: p.images?.[0] ?? "",
     fileUrl: p.fileKey ?? "",

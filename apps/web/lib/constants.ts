@@ -71,6 +71,22 @@ export const CATEGORIES = [
   { slug: "unlock-tools", name: "Unlock Tools", icon: "Wrench" },
 ] as const;
 
+/** Resource types shown inside each game (not top-level alone) */
+export const RESOURCE_TYPES = [
+  { slug: "android-resources", name: "Android Resources", icon: "Smartphone" },
+  { slug: "ios-resources", name: "iOS Resources", icon: "Tablet" },
+  { slug: "game-configuration-packs", name: "Game Configuration Packs", icon: "Settings" },
+  { slug: "performance-profiles", name: "Performance Profiles", icon: "Zap" },
+  { slug: "control-layouts", name: "Control Layouts", icon: "LayoutGrid" },
+  { slug: "hud-presets", name: "HUD Presets", icon: "PanelsTopLeft" },
+  { slug: "sensitivity-presets", name: "Sensitivity Presets", icon: "Crosshair" },
+  { slug: "graphics-optimization", name: "Graphics Optimization", icon: "Monitor" },
+  { slug: "device-compatibility", name: "Device Compatibility", icon: "Cpu" },
+  { slug: "installation-guides", name: "Installation Guides", icon: "BookOpen" },
+  { slug: "premium-resources", name: "Premium Resources", icon: "Crown" },
+  { slug: "downloads", name: "Downloads", icon: "Download" },
+] as const;
+
 export const DISCORD_INVITE = "https://discord.gg/astraxvoid";
 export const TELEGRAM = "https://t.me/ASTRAXVOIDexe";
 export const WHATSAPP = "";

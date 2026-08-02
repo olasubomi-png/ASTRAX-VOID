@@ -121,6 +121,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     } catch {
       message = res.statusText || `HTTP ${res.status}`;
     }
+    if (res.status === 429) {
+      throw new Error(
+        "Too many requests — please wait about a minute, then tap Retry."
+      );
+    }
     throw new Error(`API ${res.status}: ${message}`);
   }
 

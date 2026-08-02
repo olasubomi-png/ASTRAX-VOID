@@ -31,18 +31,21 @@ export function GameCard({
     let cancelled = false;
     (async () => {
       try {
-        const [a, i] = await Promise.all([
-          api.get<{ pagination?: { total?: number }; products?: unknown[] }>(
-            `/products?gameSlug=${encodeURIComponent(slug)}&category=android-resources&limit=1`
-          ),
-          api.get<{ pagination?: { total?: number }; products?: unknown[] }>(
-            `/products?gameSlug=${encodeURIComponent(slug)}&category=ios-resources&limit=1`
-          ),
-        ]);
-        if (!cancelled) {
-          setAndroidCount(a.pagination?.total ?? a.products?.length ?? 0);
-          setIosCount(i.pagination?.total ?? i.products?.length ?? 0);
-        }
+        // One request per game (not two) to reduce rate-limit pressure
+        const res = await api.get<{
+          pagination?: { total?: number };
+          products?: { category?: { slug?: string } | null }[];
+        }>(
+          `/products?gameSlug=${encodeURIComponent(slug)}&limit=100`
+        );
+        if (cancelled) return;
+        const list = res.products ?? [];
+        setAndroidCount(
+          list.filter((p) => p.category?.slug === "android-resources").length
+        );
+        setIosCount(
+          list.filter((p) => p.category?.slug === "ios-resources").length
+        );
       } catch {
         if (!cancelled) {
           setAndroidCount(0);

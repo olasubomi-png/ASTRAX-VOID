@@ -96,19 +96,48 @@ app.use(
   })
 );
 
-// Rate limiting
+// Trust proxy so rate-limit keys use X-Forwarded-For from Nginx / Vercel
+app.set("trust proxy", 1);
+
+/**
+ * Rate limiting
+ *
+ * Vercel rewrites share edge IPs toward this API. Key by real client IP from
+ * forwarded headers, and use a higher ceiling so homepage product fan-out
+ * does not trigger HTTP 429 for everyone.
+ */
+function clientKey(req: express.Request): string {
+  const xf = req.headers["x-forwarded-for"];
+  if (typeof xf === "string" && xf.length > 0) {
+    return xf.split(",")[0].trim();
+  }
+  if (Array.isArray(xf) && xf[0]) return String(xf[0]).split(",")[0].trim();
+  const real = req.headers["x-real-ip"];
+  if (typeof real === "string" && real.length > 0) return real;
+  return req.ip || "unknown";
+}
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 3000,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => clientKey(req),
+  message: {
+    success: false,
+    error: "Too many requests. Please wait a moment and try again.",
+  },
 });
 app.use(limiter);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { error: "Too many auth attempts. Try again later." },
+  max: 60,
+  keyGenerator: (req) => clientKey(req),
+  message: {
+    success: false,
+    error: "Too many auth attempts. Try again later.",
+  },
 });
 
 // Body parsing

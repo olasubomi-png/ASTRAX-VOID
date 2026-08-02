@@ -58,10 +58,32 @@ router.post(
   "/",
   requireAuth,
   requireAdmin,
-  upload.single("file"),
+  (req, res, next) => {
+    upload.single("file")(req, res, (err: unknown) => {
+      if (err) {
+        // Multer errors (size, type, etc.)
+        const msg =
+          err instanceof Error ? err.message : "Upload failed";
+        const isMulter =
+          err && typeof err === "object" && "code" in err
+            ? String((err as { code?: string }).code)
+            : "";
+        if (isMulter === "LIMIT_FILE_SIZE") {
+          return res.status(413).json({
+            success: false,
+            error: "File too large. Maximum size is 50 MB.",
+          });
+        }
+        return res.status(400).json({ success: false, error: msg });
+      }
+      next();
+    });
+  },
   (req, res) => {
     if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded. Use field name 'file'." });
+      return res
+        .status(400)
+        .json({ success: false, error: "No file uploaded. Use field name 'file'." });
     }
 
     const base = publicBase(req);

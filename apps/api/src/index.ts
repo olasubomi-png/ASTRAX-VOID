@@ -44,7 +44,16 @@ const app = express();
 const PORT = Number(process.env.PORT) || 4000;
 
 // Security
-app.use(helmet());
+// Helmet — disable Cross-Origin-Resource-Policy:same-origin so browsers
+// can call this API from the Vercel frontend origin. CORP same-origin is
+// the default in Helmet 7+ and causes opaque "Failed to fetch" errors.
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+  })
+);
+
 // CORS — accept comma-separated list of allowed origins so both Vercel
 // and local dev can be whitelisted with a single env var, e.g.:
 //   CORS_ORIGIN=https://astrax-void-web-upz5.vercel.app,http://localhost:5000
@@ -53,17 +62,37 @@ const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000")
   .map((o) => o.trim())
   .filter(Boolean);
 
+// Always permit known production frontend hosts even if env is stale
+const BUILTIN_ORIGINS = [
+  "https://astrax-void-web-upz5.vercel.app",
+  "http://localhost:3000",
+  "http://localhost:5000",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:5000",
+];
+const corsAllowlist = new Set([...allowedOrigins, ...BUILTIN_ORIGINS]);
+
 app.use(
   cors({
     origin: (origin, cb) => {
-      // Allow requests with no origin (mobile apps, curl, same-origin SSR)
+      // Allow requests with no origin (mobile apps, curl, server-to-server)
       if (!origin) return cb(null, true);
-      if (allowedOrigins.includes(origin)) return cb(null, true);
-      // Also allow if CORS_ORIGIN is a wildcard "*"
-      if (allowedOrigins.includes("*")) return cb(null, true);
-      cb(new Error(`CORS: origin '${origin}' not allowed`));
+      if (corsAllowlist.has(origin) || allowedOrigins.includes("*")) {
+        return cb(null, true);
+      }
+      // Allow any *.vercel.app preview deployment
+      if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)) {
+        return cb(null, true);
+      }
+      // Do NOT throw — throwing produces HTTP 500 and "Failed to fetch".
+      // Returning false emits a proper CORS failure the browser can surface.
+      console.warn(`[CORS] blocked origin: ${origin}`);
+      return cb(null, false);
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    maxAge: 86400,
   })
 );
 
@@ -83,7 +112,7 @@ const authLimiter = rateLimit({
 });
 
 // Body parsing
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // Serve uploaded product images / files publicly

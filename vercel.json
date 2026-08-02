@@ -5,5 +5,14 @@
   "installCommand": "pnpm install",
   "buildCommand": "pnpm --filter @astrax-void/web build",
   "outputDirectory": "apps/web/.next",
-  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- apps/web packages/shared"
+  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- apps/web packages/shared",
+  "rewrites": [
+    {
+      "source": "/api-proxy/:path*",
+      "destination": "http://34.201.64.198/api/:path*"
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_API_URL": "/api-proxy"
+  }
 }

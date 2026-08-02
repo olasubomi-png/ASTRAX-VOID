@@ -105,43 +105,70 @@ function ProductModal({
   async function uploadFile(file: File): Promise<string> {
     const token =
       typeof window !== "undefined" ? localStorage.getItem("token") : null;
-    const base = api.baseUrl || "";
+    const base = api.baseUrl || "/api-proxy";
     const fd = new FormData();
     fd.append("file", file);
 
-    const res = await fetch(`${base}/admin/upload`, {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: fd,
-      // Do NOT set Content-Type — browser sets multipart boundary
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${base}/admin/upload`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+        // Do NOT set Content-Type — browser sets multipart boundary
+      });
+    } catch {
+      throw new Error(
+        "Could not reach the upload server. Check your connection and try again."
+      );
+    }
 
     if (!res.ok) {
       let msg = `Upload failed (${res.status})`;
       try {
-        const j = (await res.json()) as { error?: string };
-        if (j.error) msg = j.error;
+        const j = (await res.json()) as { error?: string; message?: string };
+        if (j.error || j.message) msg = j.error ?? j.message ?? msg;
       } catch { /* ignore */ }
+      if (res.status === 401 || res.status === 403) {
+        msg = "Session expired or admin access required. Please log in again.";
+      }
       throw new Error(msg);
     }
 
-    const data = (await res.json()) as { url: string };
+    const data = (await res.json()) as { url: string; success?: boolean };
+    if (!data.url) throw new Error("Upload succeeded but no file URL was returned");
     return data.url;
   }
 
   async function handleImagePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    // Reset so the same file can be re-selected
+    e.target.value = "";
     if (!file) return;
+
+    // Validate type (gallery only — no camera force)
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file (JPG, PNG, WebP, GIF)");
+      return;
+    }
+    // Max 10 MB for product images
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image is too large. Maximum size is 10 MB.");
+      return;
+    }
+
     // Local preview immediately
-    setImagePreview(URL.createObjectURL(file));
+    const previewUrl = URL.createObjectURL(file);
+    setImagePreview(previewUrl);
     setUploadingImage(true);
     try {
       const url = await uploadFile(file);
       set("imageUrl", url);
-      toast.success("Image uploaded");
+      toast.success("Image uploaded successfully");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Image upload failed");
       setImagePreview(form.imageUrl || null);
+      URL.revokeObjectURL(previewUrl);
     } finally {
       setUploadingImage(false);
     }
@@ -149,14 +176,28 @@ function ProductModal({
 
   async function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
+
+    // Max 50 MB for download packs
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error("File is too large. Maximum size is 50 MB.");
+      return;
+    }
+
     setUploadingFile(true);
     try {
       const url = await uploadFile(file);
       set("fileUrl", url);
       toast.success(`File uploaded: ${file.name}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "File upload failed");
+      const msg = err instanceof Error ? err.message : "File upload failed";
+      // Never surface raw network TypeError text
+      if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+        toast.error("Upload failed — could not reach the server. Check your connection and try again.");
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setUploadingFile(false);
     }
@@ -254,11 +295,10 @@ function ProductModal({
               <div className="flex-1 min-w-0 space-y-1.5">
                 <label className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-3 py-3 text-sm text-primary cursor-pointer hover:bg-primary/10 transition-colors">
                   <Upload className="h-4 w-4" />
-                  {uploadingImage ? "Uploading…" : "Choose image from phone"}
+                  {uploadingImage ? "Uploading…" : "Choose image from gallery"}
                   <input
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     className="hidden"
                     disabled={uploadingImage}
                     onChange={handleImagePick}
@@ -284,7 +324,7 @@ function ProductModal({
                 ? "Uploading…"
                 : form.fileUrl
                   ? "Replace file"
-                  : "Choose file from phone"}
+                  : "Choose download file"}
               <input
                 type="file"
                 accept=".zip,.rar,.7z,.cfg,.txt,.json,.pdf,image/*,*/*"

@@ -7,14 +7,30 @@
  *   - Vercel prod: /api-proxy  (rewritten by vercel.json → http://34.201.64.198/api)
  */
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
-
-if (!API_BASE && typeof window !== "undefined") {
-  console.warn(
-    "[ASTRAX-VOID] NEXT_PUBLIC_API_URL is not set. API calls will fail."
-  );
+/**
+ * Prefer relative /api-proxy so the browser always hits the same origin.
+ * Next.js (dev) and Vercel (prod) rewrite /api-proxy/* → Express /api/*.
+ * Absolute http:// URLs from an https:// site cause mixed-content blocks
+ * and "Failed to fetch". Only use an absolute URL when it is https://.
+ */
+function resolveApiBase(): string {
+  const raw = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
+  if (!raw) return "/api-proxy";
+  // Block accidental mixed content: http API from https page
+  if (
+    typeof window !== "undefined" &&
+    window.location.protocol === "https:" &&
+    raw.startsWith("http://")
+  ) {
+    console.warn(
+      "[ASTRAX-VOID] NEXT_PUBLIC_API_URL is http:// on an https:// page — using /api-proxy to avoid mixed content."
+    );
+    return "/api-proxy";
+  }
+  return raw;
 }
+
+const API_BASE = resolveApiBase();
 
 // ─── Auth helpers (browser-only) ──────────────────────────────────────────
 
@@ -51,15 +67,26 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     authHeaders["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders,
-      ...headers,
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...rest,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+        ...headers,
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch (networkErr) {
+    // TypeError: Failed to fetch — never surface the raw browser message
+    const hint =
+      networkErr instanceof Error ? networkErr.message : String(networkErr);
+    console.error("[ASTRAX-VOID] Network error", API_BASE + path, hint);
+    throw new Error(
+      "Unable to reach the server. Please check your connection and try again."
+    );
+  }
 
   if (!res.ok) {
     // Try JSON first (structured error from our API), then fall back to a

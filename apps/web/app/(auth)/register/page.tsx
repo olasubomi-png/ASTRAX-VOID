@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, setAuthToken } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -52,7 +52,7 @@ export default function RegisterPage() {
         password: form.password,
       });
 
-      localStorage.setItem("token", res.token);
+      setAuthToken(res.token);
       localStorage.setItem("user", JSON.stringify(res.user));
 
       toast.success("Account created successfully!");
@@ -66,8 +66,12 @@ export default function RegisterPage() {
       const message =
         err instanceof Error ? err.message : "Registration failed";
 
-      if (message.includes("409")) {
+      if (/409|already taken|already exists/i.test(message)) {
         toast.error("Email or username already exists");
+      } else if (/unable to reach|connection|network/i.test(message)) {
+        toast.error("Unable to reach the server. Please try again in a moment.");
+      } else if (/failed to fetch/i.test(message)) {
+        toast.error("Unable to reach the server. Please try again in a moment.");
       } else {
         toast.error(message);
       }

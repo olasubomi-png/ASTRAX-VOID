@@ -43,7 +43,13 @@ export default function LoginPage() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Invalid credentials";
-      toast.error(message.includes("401") ? "Invalid email or password" : message);
+      if (/401|invalid credentials/i.test(message)) {
+        toast.error("Invalid email or password");
+      } else if (/unable to reach|connection|network/i.test(message)) {
+        toast.error("Unable to reach the server. Please try again in a moment.");
+      } else {
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
     }

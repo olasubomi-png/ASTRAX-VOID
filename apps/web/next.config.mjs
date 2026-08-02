@@ -9,6 +9,28 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ["lucide-react", "framer-motion"],
   },
+
+  // ── API proxy ──────────────────────────────────────────────────────────────
+  // In development (Replit / local): the browser cannot reach localhost:4000
+  // directly because the preview is proxied. We expose /api-proxy/* on the
+  // Next.js origin and have Next.js server-side forward those requests to
+  // Express — container-to-container, so localhost resolves correctly.
+  //
+  // In production: set NEXT_PUBLIC_API_URL to the absolute Express URL
+  // (e.g. https://api.yourdomain.com/api) in your Vercel / hosting env vars.
+  // The /api-proxy rewrite is still defined but never hit because the
+  // frontend uses an absolute URL that bypasses it entirely.
+  async rewrites() {
+    const apiInternalUrl =
+      process.env.API_INTERNAL_URL || "http://localhost:4000";
+    return [
+      {
+        source: "/api-proxy/:path*",
+        destination: `${apiInternalUrl}/api/:path*`,
+      },
+    ];
+  },
+
   // Security headers — X-Frame-Options is handled by Nginx in production
   async headers() {
     return [

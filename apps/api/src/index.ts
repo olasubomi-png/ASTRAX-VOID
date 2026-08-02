@@ -8,15 +8,23 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // ── Startup validation ────────────────────────────────────────────────────────
-// Check required env vars before importing Prisma (which throws if DATABASE_URL
-// is missing) so PM2 logs a clear message instead of a cryptic crash.
+// In production: hard-exit on missing vars so PM2/Docker restarts with a clear
+// error message rather than a cryptic Prisma crash.
+// In development: warn and continue — routes that need DB will return 503.
+const IS_PROD = process.env.NODE_ENV === "production";
 const REQUIRED_ENV = ["DATABASE_URL", "JWT_SECRET", "CORS_ORIGIN"] as const;
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
 if (missing.length > 0) {
-  console.error("\n❌ ASTRAX-VOID API cannot start — missing required environment variables:");
-  missing.forEach((key) => console.error(`   • ${key}`));
-  console.error("\n📋 Fix: cp apps/api/.env.example apps/api/.env  then fill in the values.\n");
-  process.exit(1);
+  if (IS_PROD) {
+    console.error("\n❌ ASTRAX-VOID API cannot start — missing required environment variables:");
+    missing.forEach((key) => console.error(`   • ${key}`));
+    console.error("\n📋 Fix: set the listed variables in your deployment environment.\n");
+    process.exit(1);
+  } else {
+    console.warn("\n⚠️  Missing env vars (dev mode — affected routes will return 503):");
+    missing.forEach((key) => console.warn(`   • ${key}`));
+    console.warn("📋 Fix: update apps/api/.env with real values.\n");
+  }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -87,14 +95,22 @@ app.use(errorHandler);
 
 // ── Start server after confirming database is reachable ───────────────────────
 async function start() {
-  try {
-    await prisma.$connect();
-    console.log("✅ Database connected");
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("❌ Database connection failed:", msg);
-    console.error("   Check DATABASE_URL in apps/api/.env");
-    process.exit(1);
+  if (process.env.DATABASE_URL) {
+    try {
+      await prisma.$connect();
+      console.log("✅ Database connected");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("❌ Database connection failed:", msg);
+      if (IS_PROD) {
+        console.error("   Check DATABASE_URL in your deployment environment.");
+        process.exit(1);
+      } else {
+        console.warn("⚠️  Running without DB — admin/order/user routes will return 503.");
+      }
+    }
+  } else {
+    console.warn("⚠️  DATABASE_URL not set — DB routes will return 503.");
   }
 
   app.listen(PORT, () => {

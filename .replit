@@ -17,6 +17,10 @@ author = "agent"
 task = "workflow.run"
 args = "Start Web (dev)"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start API (dev)"
+
 [[workflows.workflow]]
 name = "Start Web (dev)"
 author = "agent"
@@ -29,16 +33,37 @@ waitForPort = 5000
 [workflows.workflow.metadata]
 outputType = "webview"
 
+[[workflows.workflow]]
+name = "Start API (dev)"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @astrax-void/api run dev"
+waitForPort = 4000
+
+[workflows.workflow.metadata]
+outputType = "console"
+
 [userenv]
 
 [userenv.shared]
-NEXTAUTH_URL = "http://localhost:3000"
-NEXT_PUBLIC_API_URL = "http://localhost:4000/api"
-NEXT_PUBLIC_APP_URL = "http://localhost:3000"
+NEXTAUTH_URL = "http://localhost:5000"
+NEXT_PUBLIC_API_URL = "/api-proxy"
+NEXT_PUBLIC_APP_URL = "http://localhost:5000"
+API_PORT = "4000"
+CORS_ORIGIN = "http://localhost:5000"
+JWT_EXPIRES_IN = "7d"
+JWT_REFRESH_EXPIRES_IN = "30d"
+NODE_ENV = "development"
 
 [[ports]]
 localPort = 3000
 externalPort = 80
+
+[[ports]]
+localPort = 4000
+externalPort = 3000
 
 [[ports]]
 localPort = 5000

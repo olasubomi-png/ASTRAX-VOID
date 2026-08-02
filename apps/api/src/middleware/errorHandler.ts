@@ -11,10 +11,11 @@ export function errorHandler(
   const status = err.status || err.statusCode || 500;
   const message = err.message || "Internal server error";
 
+  // Never expose stack traces in HTTP responses — they reveal implementation
+  // details and internal paths. Stack is already printed to console above.
   res.status(status).json({
     success: false,
     error: message,
-    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
   });
 }
 

@@ -16,6 +16,9 @@ import {
   Eye,
   EyeOff,
   ChevronDown,
+  Upload,
+  Image as ImageIcon,
+  FileArchive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,13 +92,83 @@ function ProductModal({
 }) {
   const [form, setForm] = useState<ProductForm>(initial ?? EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(
+    initial?.imageUrl || null
+  );
 
   const set = (k: keyof ProductForm, v: string | boolean) =>
     setForm((prev) => ({ ...prev, [k]: v }));
 
+  /** Upload a file from the phone/PC to the API and return the public URL */
+  async function uploadFile(file: File): Promise<string> {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const base = api.baseUrl || "";
+    const fd = new FormData();
+    fd.append("file", file);
+
+    const res = await fetch(`${base}/admin/upload`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+      // Do NOT set Content-Type — browser sets multipart boundary
+    });
+
+    if (!res.ok) {
+      let msg = `Upload failed (${res.status})`;
+      try {
+        const j = (await res.json()) as { error?: string };
+        if (j.error) msg = j.error;
+      } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+
+    const data = (await res.json()) as { url: string };
+    return data.url;
+  }
+
+  async function handleImagePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Local preview immediately
+    setImagePreview(URL.createObjectURL(file));
+    setUploadingImage(true);
+    try {
+      const url = await uploadFile(file);
+      set("imageUrl", url);
+      toast.success("Image uploaded");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Image upload failed");
+      setImagePreview(form.imageUrl || null);
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  async function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingFile(true);
+    try {
+      const url = await uploadFile(file);
+      set("fileUrl", url);
+      toast.success(`File uploaded: ${file.name}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "File upload failed");
+    } finally {
+      setUploadingFile(false);
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) { toast.error("Product name is required"); return; }
+    if (uploadingImage || uploadingFile) {
+      toast.error("Please wait for uploads to finish");
+      return;
+    }
     setSaving(true);
     try {
       await onSave(form);
@@ -161,14 +234,71 @@ function ProductModal({
             </div>
           </div>
 
+          {/* ── Product Image (pick from phone/PC) ── */}
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Image URL</label>
-            <Input value={form.imageUrl} onChange={(e) => set("imageUrl", e.target.value)} placeholder="https://example.com/image.png" type="url" />
+            <label className="text-xs text-muted-foreground mb-1.5 block">Product Image</label>
+            <div className="flex items-start gap-3">
+              <div className="relative h-20 w-20 shrink-0 rounded-xl border border-white/10 bg-white/5 overflow-hidden flex items-center justify-center">
+                {imagePreview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={imagePreview} alt="Preview" className="h-full w-full object-cover" />
+                ) : (
+                  <ImageIcon className="h-7 w-7 text-white/20" />
+                )}
+                {uploadingImage && (
+                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <label className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-3 py-3 text-sm text-primary cursor-pointer hover:bg-primary/10 transition-colors">
+                  <Upload className="h-4 w-4" />
+                  {uploadingImage ? "Uploading…" : "Choose image from phone"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    disabled={uploadingImage}
+                    onChange={handleImagePick}
+                  />
+                </label>
+                {form.imageUrl && (
+                  <p className="text-[10px] text-muted-foreground truncate">{form.imageUrl}</p>
+                )}
+              </div>
+            </div>
           </div>
 
+          {/* ── Download File (pick from phone/PC) ── */}
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Download File URL</label>
-            <Input value={form.fileUrl} onChange={(e) => set("fileUrl", e.target.value)} placeholder="https://example.com/file.zip" type="url" />
+            <label className="text-xs text-muted-foreground mb-1.5 block">Download File</label>
+            <label className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-3 py-3.5 text-sm text-primary cursor-pointer hover:bg-primary/10 transition-colors">
+              {uploadingFile ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileArchive className="h-4 w-4" />
+              )}
+              {uploadingFile
+                ? "Uploading…"
+                : form.fileUrl
+                  ? "Replace file"
+                  : "Choose file from phone"}
+              <input
+                type="file"
+                accept=".zip,.rar,.7z,.cfg,.txt,.json,.pdf,image/*,*/*"
+                className="hidden"
+                disabled={uploadingFile}
+                onChange={handleFilePick}
+              />
+            </label>
+            {form.fileUrl && (
+              <p className="mt-1.5 text-[10px] text-muted-foreground truncate flex items-center gap-1">
+                <Check className="h-3 w-3 text-green-400 shrink-0" />
+                {form.fileUrl}
+              </p>
+            )}
           </div>
 
           <div>

@@ -38,6 +38,7 @@ import { userRoutes } from "./routes/user.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { searchRoutes } from "./routes/search.js";
 import { categoryRoutes } from "./routes/categories.js";
+import { uploadRoutes, UPLOAD_DIR } from "./routes/upload.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -85,6 +86,9 @@ const authLimiter = rateLimit({
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+// Serve uploaded product images / files publicly
+app.use("/uploads", express.static(UPLOAD_DIR));
+
 // Health — always responds, even if DB is degraded
 app.get("/health", (_req, res) => {
   res.json({
@@ -101,6 +105,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/admin/upload", uploadRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/categories", categoryRoutes);

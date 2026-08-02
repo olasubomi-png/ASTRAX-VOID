@@ -1,0 +1,81 @@
+import { Router } from "express";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import { randomUUID } from "crypto";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
+
+const router = Router();
+
+// Store uploads on disk next to the API process
+const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || "";
+    const safe = `${Date.now()}-${randomUUID().slice(0, 8)}${ext}`;
+    cb(null, safe);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    // 50 MB — enough for images and most config/zip packs
+    fileSize: 50 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, cb) => {
+    // Allow images and common archive/config types
+    const allowed = /\.(jpe?g|png|gif|webp|svg|zip|rar|7z|pdf|txt|json|cfg|ini|xml)$/i;
+    if (allowed.test(path.extname(file.originalname)) || file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("File type not allowed. Use images or common archive/config files."));
+    }
+  },
+});
+
+// Public base used to build the URL returned to the browser
+function publicBase(req: { protocol: string; get: (h: string) => string | undefined }) {
+  // Prefer explicit env (e.g. http://34.201.64.198) so URLs work behind Nginx
+  if (process.env.PUBLIC_API_URL) {
+    return process.env.PUBLIC_API_URL.replace(/\/$/, "");
+  }
+  const host = req.get("host") || "localhost:4000";
+  return `${req.protocol}://${host}`;
+}
+
+/**
+ * POST /api/admin/upload
+ * multipart field name: "file"
+ * Returns: { success, url, key, originalName, size }
+ */
+router.post(
+  "/",
+  requireAuth,
+  requireAdmin,
+  upload.single("file"),
+  (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded. Use field name 'file'." });
+    }
+
+    const base = publicBase(req);
+    const url = `${base}/uploads/${req.file.filename}`;
+
+    res.status(201).json({
+      success: true,
+      url,
+      key: req.file.filename,
+      originalName: req.file.originalname,
+      size: req.file.size,
+      mimeType: req.file.mimetype,
+    });
+  }
+);
+
+export { router as uploadRoutes, UPLOAD_DIR };

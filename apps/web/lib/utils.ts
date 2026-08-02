@@ -86,3 +86,32 @@ export function triggerDownload(url: string, filename?: string) {
   a.click();
   a.remove();
 }
+
+
+/** Fire-and-forget download analytics */
+export function logProductDownload(payload: {
+  productId?: string;
+  productName?: string;
+  gameSlug?: string | null;
+  platform?: string | null;
+}) {
+  if (typeof window === "undefined") return;
+  try {
+    const base =
+      (typeof process !== "undefined" &&
+        process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "")) ||
+      "/api-proxy";
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    const token = localStorage.getItem("token");
+    if (token) headers.Authorization = `Bearer ${token}`;
+    void fetch(`${base}/downloads/log`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  } catch {
+    /* ignore */
+  }
+}

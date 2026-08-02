@@ -38,6 +38,8 @@ export async function deliverDigitalProduct(orderItemId: string, userId: string)
     data: {
       userId,
       orderItemId,
+      productId: item.productId,
+      productName: item.product?.name,
     },
   });
 

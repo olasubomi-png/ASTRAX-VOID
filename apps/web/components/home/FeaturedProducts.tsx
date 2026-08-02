@@ -9,7 +9,7 @@ import { GetKeyModal } from "@/components/ui/GetKeyModal";
 import { api } from "@/lib/api";
 import type { Product } from "@/types";
 import { toast } from "sonner";
-import { mediaUrl, triggerDownload } from "@/lib/utils";
+import { mediaUrl, triggerDownload, logProductDownload } from "@/lib/utils";
 
 function mapApiProduct(p: any): Product {
   const categorySlug =
@@ -81,6 +81,7 @@ export function FeaturedProducts() {
   const handleDownload = (product: Product) => {
     const url = mediaUrl(product.fileUrl) || mediaUrl(product.fileKey);
     if (url) {
+      logProductDownload({ productId: product.id, productName: product.name, platform: typeof product.category === "string" ? product.category : undefined });
       triggerDownload(url, product.slug ? `${product.slug}.zip` : "download.zip");
     } else {
       toast.info("No file attached. Contact us for your download link.");

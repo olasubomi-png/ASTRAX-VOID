@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { GetKeyModal } from "@/components/ui/GetKeyModal";
 import { GAMES, gameArt } from "@/lib/constants";
 import { api } from "@/lib/api";
-import { mediaUrl, triggerDownload } from "@/lib/utils";
+import { mediaUrl, triggerDownload, logProductDownload } from "@/lib/utils";
 import { toast } from "sonner";
 
 type ApiProduct = {
@@ -153,6 +153,12 @@ function GameDetailInner({
   const handleDownload = (p: ApiProduct) => {
     const url = mediaUrl(p.fileKey);
     if (url) {
+      logProductDownload({
+        productId: p.id,
+        productName: p.name,
+        gameSlug: p.gameSlug,
+        platform: p.category?.slug,
+      });
       triggerDownload(url, p.slug ? `${p.slug}.zip` : "download.zip");
     } else {
       toast.info("No file attached. Use Get Key or contact support.");

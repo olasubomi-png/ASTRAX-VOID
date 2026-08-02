@@ -39,6 +39,7 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { searchRoutes } from "./routes/search.js";
 import { categoryRoutes } from "./routes/categories.js";
 import { uploadRoutes, UPLOAD_DIR } from "./routes/upload.js";
+import { downloadRoutes } from "./routes/downloads.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -167,6 +168,7 @@ app.use("/api/admin/upload", uploadRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/categories", categoryRoutes);
+app.use("/api/downloads", downloadRoutes);
 
 // Error handler
 app.use(errorHandler);

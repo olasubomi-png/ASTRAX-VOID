@@ -5,6 +5,7 @@ import { z } from "zod";
 import { AppError } from "../middleware/errorHandler.js";
 import { requireAuth, AuthRequest } from "../middleware/auth.js";
 import { prisma } from "../lib/prisma.js";
+import { logActivity } from "../lib/activity.js";
 const router = Router();
 
 const registerSchema = z.object({
@@ -48,6 +49,12 @@ router.post("/register", async (req, res, next) => {
     });
 
     const token = signToken(user);
+    await logActivity({
+      type: "user_register",
+      message: `User registered: ${user.username}`,
+      actorId: user.id,
+      actorName: user.username,
+    });
     res.status(201).json({
       success: true,
       token,

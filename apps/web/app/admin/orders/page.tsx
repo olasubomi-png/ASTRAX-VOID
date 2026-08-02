@@ -1,72 +1,112 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { Download, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ShoppingBag } from "lucide-react";
+import { api } from "@/lib/api";
 
-const orders: {
+type DownloadRow = {
   id: string;
-  customer: string;
-  status: string;
-  date: string;
-  items?: string[];
-}[] = [];
-
-const statusColor: Record<string, string> = {
-  DELIVERED: "text-green-400 bg-green-400/10",
-  PAID: "text-blue-400 bg-blue-400/10",
-  PENDING: "text-yellow-400 bg-yellow-400/10",
-  CANCELLED: "text-red-400 bg-red-400/10",
+  productName?: string | null;
+  gameSlug?: string | null;
+  platform?: string | null;
+  createdAt: string;
+  user?: { username?: string; email?: string } | null;
 };
 
-export default function AdminOrdersPage() {
+export default function AdminDownloadsPage() {
+  const [rows, setRows] = useState<DownloadRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await api.get<{
+        success: boolean;
+        downloads: DownloadRow[];
+        pagination: { total: number };
+      }>("/admin/downloads?limit=100");
+      setRows(res.downloads || []);
+      setTotal(res.pagination?.total ?? 0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load downloads");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
   return (
     <div className="section-padding">
       <div className="container-max">
         <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
-          <h1 className="font-display text-3xl font-bold">
-            Manage <span className="neon-text">Orders</span>
-          </h1>
-          <Link href="/admin">
-            <Button variant="ghost" size="sm">← Admin</Button>
-          </Link>
-        </div>
-
-        {orders.length === 0 ? (
-          <div className="card-glow p-12 text-center">
-            <ShoppingBag className="h-12 w-12 text-primary/40 mx-auto mb-4" />
-            <p className="text-muted-foreground">No orders yet.</p>
+          <div>
+            <h1 className="font-display text-3xl font-bold">
+              <span className="neon-text">Downloads</span>
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {total} total · free platform (no orders/payments)
+            </p>
           </div>
-        ) : (
-          <div className="card-glow overflow-hidden">
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={load} className="gap-2">
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+            <Link href="/admin">
+              <Button variant="ghost" size="sm">← Admin</Button>
+            </Link>
+          </div>
+        </div>
+        {error && <p className="text-sm text-red-400 mb-4">{error}</p>}
+        <div className="card-glow overflow-hidden">
+          {loading && rows.length === 0 ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="p-12 text-center">
+              <Download className="h-12 w-12 text-primary/40 mx-auto mb-4" />
+              <p className="text-muted-foreground">
+                No downloads recorded yet. When users download files, they appear here.
+              </p>
+            </div>
+          ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/10 text-left text-muted-foreground">
-                    <th className="p-4 font-medium">Order ID</th>
-                    <th className="p-4 font-medium">Customer</th>
-                    <th className="p-4 font-medium">Status</th>
-                    <th className="p-4 font-medium">Date</th>
+                    <th className="p-4 font-medium">Product</th>
+                    <th className="p-4 font-medium">Game</th>
+                    <th className="p-4 font-medium">Platform</th>
+                    <th className="p-4 font-medium">User</th>
+                    <th className="p-4 font-medium">When</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map((o) => (
-                    <tr key={o.id} className="border-b border-white/5 hover:bg-white/5">
-                      <td className="p-4 font-mono text-primary text-xs">{o.id}</td>
-                      <td className="p-4 text-muted-foreground">{o.customer}</td>
-                      <td className="p-4">
-                        <span className={`rounded-lg px-2.5 py-1 text-xs font-medium ${statusColor[o.status] || "text-muted-foreground bg-white/5"}`}>
-                          {o.status}
-                        </span>
+                  {rows.map((r) => (
+                    <tr key={r.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                      <td className="p-4 font-medium">{r.productName || "—"}</td>
+                      <td className="p-4 text-muted-foreground">{r.gameSlug || "—"}</td>
+                      <td className="p-4 text-muted-foreground">
+                        {r.platform?.includes("ios") ? "iOS" : r.platform?.includes("android") ? "Android" : r.platform || "—"}
                       </td>
-                      <td className="p-4 text-muted-foreground">{o.date}</td>
+                      <td className="p-4 text-muted-foreground">{r.user?.username || "Guest"}</td>
+                      <td className="p-4 text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,73 +1,102 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  HardDrive, Loader2, Package, Download, Gamepad2, Smartphone, Tablet,
+  Image as ImageIcon, FileArchive, RefreshCw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2 } from "lucide-react";
+import { api } from "@/lib/api";
 
-const coupons = [
-  { code: "ASTRAX10", type: "PERCENTAGE", value: "10%", uses: "45/1000", status: "Active", expires: "Never" },
-  { code: "LAUNCH25", type: "PERCENTAGE", value: "25%", uses: "200/200", status: "Exhausted", expires: "2026-08-01" },
-  { code: "VOID5OFF", type: "FIXED", value: "$5.00", uses: "12/500", status: "Active", expires: "2026-12-31" },
-];
+type Stats = {
+  products: number;
+  downloads: number;
+  games: number;
+  categories: number;
+  androidResources: number;
+  iosResources: number;
+  uploadedImages: number;
+  uploadedZips: number;
+  storageMB: number;
+  uploadedFiles: number;
+};
 
-export default function AdminCouponsPage() {
+export default function AdminPlatformPage() {
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await api.get<{ success: boolean; stats: Stats }>("/admin/stats");
+      setStats(res.stats);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const cards = [
+    { label: "Products", value: stats?.products, icon: Package },
+    { label: "Downloads", value: stats?.downloads, icon: Download },
+    { label: "Games", value: stats?.games, icon: Gamepad2 },
+    { label: "Categories", value: stats?.categories, icon: HardDrive },
+    { label: "Android files", value: stats?.androidResources, icon: Smartphone },
+    { label: "iOS files", value: stats?.iosResources, icon: Tablet },
+    { label: "Images", value: stats?.uploadedImages, icon: ImageIcon },
+    { label: "ZIP files", value: stats?.uploadedZips, icon: FileArchive },
+    { label: "All uploaded files", value: stats?.uploadedFiles, icon: HardDrive },
+    { label: "Storage used", value: stats?.storageMB != null ? `${stats.storageMB} MB` : undefined, icon: HardDrive },
+  ];
+
   return (
     <div className="section-padding">
       <div className="container-max">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-          <h1 className="font-display text-3xl font-bold">
-            Manage <span className="neon-text">Coupons</span>
-          </h1>
+        <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
+          <div>
+            <h1 className="font-display text-3xl font-bold">
+              Platform <span className="neon-text">Statistics</span>
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Coupons / payments removed — free download metrics only
+            </p>
+          </div>
           <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={load} className="gap-2">
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
             <Link href="/admin">
               <Button variant="ghost" size="sm">← Admin</Button>
             </Link>
-            <Button size="sm" className="gap-2">
-              <Plus className="h-4 w-4" /> New Coupon
-            </Button>
           </div>
         </div>
-
-        <div className="card-glow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/10 text-left text-muted-foreground">
-                  <th className="p-4 font-medium">Code</th>
-                  <th className="p-4 font-medium">Type</th>
-                  <th className="p-4 font-medium">Value</th>
-                  <th className="p-4 font-medium">Uses</th>
-                  <th className="p-4 font-medium">Expires</th>
-                  <th className="p-4 font-medium">Status</th>
-                  <th className="p-4 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {coupons.map((c) => (
-                  <tr key={c.code} className="border-b border-white/5 hover:bg-white/5">
-                    <td className="p-4 font-mono text-primary font-semibold">{c.code}</td>
-                    <td className="p-4 text-muted-foreground">{c.type}</td>
-                    <td className="p-4 font-semibold">{c.value}</td>
-                    <td className="p-4 text-muted-foreground">{c.uses}</td>
-                    <td className="p-4 text-muted-foreground">{c.expires}</td>
-                    <td className="p-4">
-                      <span className={`rounded-lg px-2.5 py-1 text-xs font-medium ${
-                        c.status === "Active" ? "text-green-400 bg-green-400/10" : "text-muted-foreground bg-white/5"
-                      }`}>
-                        {c.status}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <button className="p-1.5 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-red-400 transition-colors">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {error && <p className="text-sm text-red-400 mb-4">{error}</p>}
+        {loading && !stats ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {cards.map((c) => (
+              <div key={c.label} className="card-glow p-5">
+                <c.icon className="h-5 w-5 text-primary mb-3" />
+                <p className="text-2xl font-bold">
+                  {typeof c.value === "string" ? c.value : c.value != null ? c.value.toLocaleString() : "—"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">{c.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -11,7 +11,7 @@ import { GetKeyModal } from "@/components/ui/GetKeyModal";
 import { api } from "@/lib/api";
 import type { Product } from "@/types";
 import { toast } from "sonner";
-import { mediaUrl, triggerDownload } from "@/lib/utils";
+import { mediaUrl, triggerDownload, logProductDownload } from "@/lib/utils";
 
 /** Map API product (category may be object) → frontend Product */
 function mapApiProduct(p: any): Product {
@@ -94,6 +94,12 @@ export default function ProductsPage() {
     const url = mediaUrl(product.fileUrl) || mediaUrl(product.fileKey);
     if (url) {
       const name = product.slug ? `${product.slug}.zip` : "download.zip";
+      logProductDownload({
+        productId: product.id,
+        productName: product.name,
+        gameSlug: (product as any).gameSlug,
+        platform: typeof product.category === "string" ? product.category : undefined,
+      });
       triggerDownload(url, name);
     } else {
       toast.info(

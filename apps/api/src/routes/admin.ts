@@ -2,30 +2,290 @@ import { Router } from "express";
 import { requireAuth, requireAdmin, AuthRequest } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { prisma } from "../lib/prisma.js";
+import { logActivity } from "../lib/activity.js";
+import fs from "fs";
+import path from "path";
 const router = Router();
 
 router.use(requireAuth, requireAdmin);
 
-// Dashboard stats
+// ── Dashboard stats (live DB only — no demo data) ───────────────────────────
 router.get("/stats", async (_req, res, next) => {
   try {
-    const [users, orders, products, revenue] = await Promise.all([
-      prisma.user.count(),
-      prisma.order.count({ where: { status: { in: ["PAID", "DELIVERED"] } } }),
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const startOfWeek = new Date();
+    startOfWeek.setDate(startOfWeek.getDate() - 7);
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const [
+      products,
+      productsActive,
+      users,
+      admins,
+      categories,
+      downloads,
+      downloadsToday,
+      downloadsWeek,
+      downloadsMonth,
+      androidProducts,
+      iosProducts,
+      latestUser,
+      latestProduct,
+      recentActivity,
+    ] = await Promise.all([
+      prisma.product.count(),
       prisma.product.count({ where: { isActive: true } }),
-      prisma.order.aggregate({
-        where: { status: { in: ["PAID", "DELIVERED"] } },
-        _sum: { total: true },
+      prisma.user.count(),
+      prisma.user.count({ where: { role: "ADMIN" } }),
+      prisma.category.count(),
+      prisma.downloadLog.count(),
+      prisma.downloadLog.count({ where: { createdAt: { gte: startOfDay } } }),
+      prisma.downloadLog.count({ where: { createdAt: { gte: startOfWeek } } }),
+      prisma.downloadLog.count({ where: { createdAt: { gte: startOfMonth } } }),
+      prisma.product.count({
+        where: { category: { slug: "android-resources" }, isActive: true },
       }),
+      prisma.product.count({
+        where: { category: { slug: "ios-resources" }, isActive: true },
+      }),
+      prisma.user.findFirst({
+        orderBy: { createdAt: "desc" },
+        select: { id: true, username: true, email: true, createdAt: true },
+      }),
+      prisma.product.findFirst({
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          gameSlug: true,
+          createdAt: true,
+          category: { select: { slug: true, name: true } },
+        },
+      }),
+      prisma.activityLog.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+    ]);
+
+    // Distinct games that have at least one product
+    const gameGroups = await prisma.product.groupBy({
+      by: ["gameSlug"],
+      where: { gameSlug: { not: null } },
+      _count: true,
+    });
+    const games = gameGroups.filter((g) => g.gameSlug).length;
+
+    // Storage from uploads directory
+    let storageBytes = 0;
+    let uploadedFiles = 0;
+    let uploadedImages = 0;
+    let uploadedZips = 0;
+    try {
+      const uploadDir = path.resolve(process.cwd(), "uploads");
+      if (fs.existsSync(uploadDir)) {
+        const files = fs.readdirSync(uploadDir);
+        uploadedFiles = files.length;
+        for (const f of files) {
+          const fp = path.join(uploadDir, f);
+          try {
+            const st = fs.statSync(fp);
+            if (st.isFile()) {
+              storageBytes += st.size;
+              const lower = f.toLowerCase();
+              if (/\.(jpe?g|png|gif|webp|svg)$/.test(lower)) uploadedImages += 1;
+              if (/\.(zip|rar|7z)$/.test(lower)) uploadedZips += 1;
+            }
+          } catch {
+            /* skip */
+          }
+        }
+      }
+    } catch {
+      /* ignore storage errors */
+    }
+
+    // Most downloaded product (by productName in logs)
+    const topDownloads = await prisma.downloadLog.groupBy({
+      by: ["productName"],
+      where: { productName: { not: null } },
+      _count: { productName: true },
+      orderBy: { _count: { productName: "desc" } },
+      take: 1,
+    });
+    const mostDownloaded = topDownloads[0]
+      ? {
+          name: topDownloads[0].productName,
+          count: topDownloads[0]._count.productName,
+        }
+      : null;
+
+    // Downloads per day (last 7 days)
+    const downloadsPerDay: { date: string; count: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      const next = new Date(d);
+      next.setDate(next.getDate() + 1);
+      const count = await prisma.downloadLog.count({
+        where: { createdAt: { gte: d, lt: next } },
+      });
+      downloadsPerDay.push({
+        date: d.toISOString().slice(0, 10),
+        count,
+      });
+    }
+
+    // New users today / week
+    const [usersToday, usersWeek] = await Promise.all([
+      prisma.user.count({ where: { createdAt: { gte: startOfDay } } }),
+      prisma.user.count({ where: { createdAt: { gte: startOfWeek } } }),
     ]);
 
     res.json({
       success: true,
       stats: {
-        users,
-        orders,
         products,
-        revenue: revenue._sum.total || 0,
+        productsActive,
+        users,
+        admins,
+        categories,
+        games,
+        androidResources: androidProducts,
+        iosResources: iosProducts,
+        downloads,
+        downloadsToday,
+        downloadsWeek,
+        downloadsMonth,
+        mostDownloaded,
+        usersToday,
+        usersWeek,
+        storageBytes,
+        storageMB: Math.round((storageBytes / (1024 * 1024)) * 10) / 10,
+        uploadedFiles,
+        uploadedImages,
+        uploadedZips,
+        latestUser,
+        latestProduct,
+        downloadsPerDay,
+        recentActivity,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Live user list
+router.get("/users", async (req, res, next) => {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+    const skip = (page - 1) * limit;
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          role: true,
+          createdAt: true,
+          avatar: true,
+        },
+      }),
+      prisma.user.count(),
+    ]);
+    res.json({
+      success: true,
+      users,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Download logs
+router.get("/downloads", async (req, res, next) => {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+    const skip = (page - 1) * limit;
+    const [logs, total] = await Promise.all([
+      prisma.downloadLog.findMany({
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        include: {
+          user: { select: { username: true, email: true } },
+        },
+      }),
+      prisma.downloadLog.count(),
+    ]);
+    res.json({
+      success: true,
+      downloads: logs,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Activity feed
+router.get("/activity", async (req, res, next) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 40));
+    const activity = await prisma.activityLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+    res.json({ success: true, activity });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Storage summary
+router.get("/storage", async (_req, res, next) => {
+  try {
+    const uploadDir = path.resolve(process.cwd(), "uploads");
+    let bytes = 0;
+    let files = 0;
+    let images = 0;
+    let zips = 0;
+    if (fs.existsSync(uploadDir)) {
+      for (const f of fs.readdirSync(uploadDir)) {
+        const fp = path.join(uploadDir, f);
+        try {
+          const st = fs.statSync(fp);
+          if (!st.isFile()) continue;
+          files += 1;
+          bytes += st.size;
+          const lower = f.toLowerCase();
+          if (/\.(jpe?g|png|gif|webp|svg)$/.test(lower)) images += 1;
+          if (/\.(zip|rar|7z)$/.test(lower)) zips += 1;
+        } catch {
+          /* skip */
+        }
+      }
+    }
+    res.json({
+      success: true,
+      storage: {
+        bytes,
+        mb: Math.round((bytes / (1024 * 1024)) * 10) / 10,
+        files,
+        images,
+        zips,
       },
     });
   } catch (err) {
@@ -168,6 +428,11 @@ router.post("/products", async (req, res, next) => {
       data: data as any,
       include: { category: true },
     });
+    await logActivity({
+      type: "product_create",
+      message: `Admin uploaded product "${product.name}"`,
+      meta: { productId: product.id, gameSlug: product.gameSlug },
+    });
     res.status(201).json({ success: true, product });
   } catch (err) {
     next(err);
@@ -192,6 +457,11 @@ router.patch("/products/:id", async (req, res, next) => {
       data: data as any,
       include: { category: true },
     });
+    await logActivity({
+      type: "product_edit",
+      message: `Admin updated product "${product.name}"`,
+      meta: { productId: product.id },
+    });
     res.json({ success: true, product });
   } catch (err) {
     next(err);
@@ -200,9 +470,14 @@ router.patch("/products/:id", async (req, res, next) => {
 
 router.delete("/products/:id", async (req, res, next) => {
   try {
-    await prisma.product.update({
+    const deleted = await prisma.product.update({
       where: { id: req.params.id },
       data: { isActive: false },
+    });
+    await logActivity({
+      type: "product_delete",
+      message: `Admin unpublished product "${deleted.name}"`,
+      meta: { productId: deleted.id },
     });
     res.json({ success: true });
   } catch (err) {

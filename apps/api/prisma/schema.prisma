@@ -177,13 +177,27 @@ model Coupon {
 
 model DownloadLog {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId      String   @db.ObjectId
-  orderItemId String
+  userId      String?  @db.ObjectId
+  productId   String?  @db.ObjectId
+  productName String?
+  gameSlug    String?
+  platform    String?
+  orderItemId String?
   ip          String?
   userAgent   String?
   createdAt   DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
+}
+
+model ActivityLog {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  type      String   // product_upload | product_edit | product_delete | user_register | user_login | download
+  message   String
+  actorId   String?
+  actorName String?
+  meta      String?  // JSON string for flexibility on Mongo
+  createdAt DateTime @default(now())
 }
 
 model SupportTicket {

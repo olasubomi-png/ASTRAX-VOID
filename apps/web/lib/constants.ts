@@ -34,16 +34,26 @@ export const FOOTER_LINKS = {
   ],
 } as const;
 
-/** Gaming Hub — supported titles */
+/** Supported games — product browsing is Game → Android / iOS only */
 export const GAMES = [
+  { slug: "codm-global", name: "Call of Duty: Mobile (Global)", shortName: "CODM", icon: "Gamepad2" },
+  { slug: "codm-garena", name: "Call of Duty: Mobile (Garena)", shortName: "CODM Garena", icon: "Gamepad2" },
+  { slug: "pubg-mobile", name: "PUBG Mobile", shortName: "PUBG", icon: "Target" },
+  { slug: "free-fire", name: "Free Fire", shortName: "Free Fire", icon: "Flame" },
   { slug: "blood-strike", name: "Blood Strike", shortName: "Blood Strike", icon: "Sword" },
   { slug: "mobile-legends", name: "Mobile Legends: Bang Bang", shortName: "MLBB", icon: "Shield" },
   { slug: "delta-force", name: "Delta Force", shortName: "Delta Force", icon: "Crosshair" },
-  { slug: "pubg-mobile", name: "PUBG Mobile", shortName: "PUBG", icon: "Target" },
-  { slug: "free-fire", name: "Free Fire", shortName: "Free Fire", icon: "Flame" },
   { slug: "fortnite", name: "Fortnite", shortName: "Fortnite", icon: "Box" },
-  { slug: "codm-global", name: "Call of Duty: Mobile (Global)", shortName: "CODM Global", icon: "Gamepad2" },
-  { slug: "codm-garena", name: "Call of Duty: Mobile (Garena)", shortName: "CODM Garena", icon: "Gamepad2" },
+  { slug: "apex-legends-mobile", name: "Apex Legends Mobile", shortName: "Apex", icon: "Crosshair" },
+  { slug: "arena-breakout", name: "Arena Breakout", shortName: "Arena Breakout", icon: "Target" },
+  { slug: "warzone-mobile", name: "Warzone Mobile", shortName: "Warzone", icon: "Gamepad2" },
+  { slug: "other", name: "Other", shortName: "Other", icon: "Box" },
+] as const;
+
+/** Only two platforms — maps to Category.slug in the database */
+export const PLATFORMS = [
+  { slug: "android-resources", name: "Android", label: "Android Resources", icon: "Smartphone" },
+  { slug: "ios-resources", name: "iOS", label: "iOS Resources", icon: "Tablet" },
 ] as const;
 
 /**
@@ -69,22 +79,6 @@ export const CATEGORIES = [
   { slug: "vip-packages", name: "VIP Packages", icon: "Crown" },
   { slug: "codm-files", name: "CODM Files", icon: "Gamepad2" },
   { slug: "unlock-tools", name: "Unlock Tools", icon: "Wrench" },
-] as const;
-
-/** Resource types shown inside each game (not top-level alone) */
-export const RESOURCE_TYPES = [
-  { slug: "android-resources", name: "Android Resources", icon: "Smartphone" },
-  { slug: "ios-resources", name: "iOS Resources", icon: "Tablet" },
-  { slug: "game-configuration-packs", name: "Game Configuration Packs", icon: "Settings" },
-  { slug: "performance-profiles", name: "Performance Profiles", icon: "Zap" },
-  { slug: "control-layouts", name: "Control Layouts", icon: "LayoutGrid" },
-  { slug: "hud-presets", name: "HUD Presets", icon: "PanelsTopLeft" },
-  { slug: "sensitivity-presets", name: "Sensitivity Presets", icon: "Crosshair" },
-  { slug: "graphics-optimization", name: "Graphics Optimization", icon: "Monitor" },
-  { slug: "device-compatibility", name: "Device Compatibility", icon: "Cpu" },
-  { slug: "installation-guides", name: "Installation Guides", icon: "BookOpen" },
-  { slug: "premium-resources", name: "Premium Resources", icon: "Crown" },
-  { slug: "downloads", name: "Downloads", icon: "Download" },
 ] as const;
 
 export const DISCORD_INVITE = "https://discord.gg/astraxvoid";

@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import type { Product } from "@/types";
 import { toast } from "sonner";
-import { GAMES, RESOURCE_TYPES, CATEGORIES } from "@/lib/constants";
+import { GAMES, PLATFORMS } from "@/lib/constants";
 
 interface ApiProduct extends Omit<Product, "category"> {
   category?: { name: string; slug: string } | null;
@@ -323,7 +323,7 @@ function ProductModal({
           </div>
 
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Resource type *</label>
+            <label className="text-xs text-muted-foreground mb-1 block">Platform *</label>
             <div className="relative">
               <select
                 className="w-full appearance-none rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary pr-8"
@@ -331,9 +331,9 @@ function ProductModal({
                 onChange={(e) => set("categorySlug", e.target.value)}
                 required
               >
-                <option value="">e.g. Android Resources, iOS Resources…</option>
-                {RESOURCE_TYPES.map((c) => (
-                  <option key={c.slug} value={c.slug}>{c.name}</option>
+                <option value="">Android or iOS…</option>
+                {PLATFORMS.map((c) => (
+                  <option key={c.slug} value={c.slug}>{c.label}</option>
                 ))}
               </select>
               <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -517,7 +517,7 @@ export default function AdminProductsPage() {
       return;
     }
     if (!form.categorySlug.trim()) {
-      toast.error("Please select a resource type (Android, iOS, …)");
+      toast.error("Please select a platform (Android or iOS)");
       return;
     }
     const payload = formToPayload(form);
@@ -540,7 +540,7 @@ export default function AdminProductsPage() {
       return;
     }
     if (!form.categorySlug.trim()) {
-      toast.error("Please select a resource type (Android, iOS, …)");
+      toast.error("Please select a platform (Android or iOS)");
       return;
     }
     const payload = formToPayload(form);
@@ -575,7 +575,12 @@ export default function AdminProductsPage() {
     description: p.description ?? "",
     shortDescription: p.shortDescription ?? "",
     gameSlug: (p as any).gameSlug ?? "",
-    categorySlug: p.category?.slug ?? "",
+    categorySlug:
+      p.category?.slug === "ios-resources"
+        ? "ios-resources"
+        : p.category?.slug === "android-resources"
+          ? "android-resources"
+          : "android-resources", // default legacy products to Android
     imageUrl: p.images?.[0] ?? "",
     fileUrl: p.fileKey ?? "",
     tags: p.tags?.join(", ") ?? "",

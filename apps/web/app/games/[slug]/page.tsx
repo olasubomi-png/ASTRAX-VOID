@@ -1,8 +1,8 @@
 "use client";
 
-import { use, useEffect, useMemo, useState, Suspense } from "react";
+import { use, useEffect, useState, Suspense } from "react";
 import Link from "next/link";
-import { notFound, useSearchParams } from "next/navigation";
+import { notFound } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Sword,
@@ -14,23 +14,18 @@ import {
   Gamepad2,
   Smartphone,
   Tablet,
-  Settings,
-  Zap,
-  LayoutGrid,
-  PanelsTopLeft,
-  Monitor,
-  Cpu,
-  BookOpen,
-  Crown,
-  Download,
-  Package,
   ArrowLeft,
   Loader2,
   Star,
+  Download,
+  Key,
 } from "lucide-react";
-import { GAMES, RESOURCE_TYPES } from "@/lib/constants";
+import { Button } from "@/components/ui/button";
+import { GetKeyModal } from "@/components/ui/GetKeyModal";
+import { GAMES } from "@/lib/constants";
 import { api } from "@/lib/api";
-import { mediaUrl } from "@/lib/utils";
+import { mediaUrl, triggerDownload } from "@/lib/utils";
+import { toast } from "sonner";
 
 const gameIconMap: Record<string, React.ElementType> = {
   Sword,
@@ -42,34 +37,88 @@ const gameIconMap: Record<string, React.ElementType> = {
   Gamepad2,
 };
 
-const resourceIconMap: Record<string, React.ElementType> = {
-  Smartphone,
-  Tablet,
-  Settings,
-  Zap,
-  LayoutGrid,
-  PanelsTopLeft,
-  Crosshair,
-  Monitor,
-  Cpu,
-  BookOpen,
-  Crown,
-  Download,
-  Package,
-};
-
 type ApiProduct = {
   id: string;
   slug: string;
   name: string;
   shortDescription?: string;
+  description?: string;
   images?: string[];
   category?: { slug?: string; name?: string } | null;
   gameSlug?: string | null;
+  fileKey?: string | null;
   rating?: number;
   reviewCount?: number;
-  isTrending?: boolean;
 };
+
+function ProductCard({
+  product,
+  platformLabel,
+  onDownload,
+  onGetKey,
+}: {
+  product: ApiProduct;
+  platformLabel: string;
+  onDownload: () => void;
+  onGetKey: () => void;
+}) {
+  const img = product.images?.[0] ? mediaUrl(product.images[0]) : null;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="card-glow group flex flex-col overflow-hidden"
+    >
+      <Link href={`/products/${product.slug}`} className="block">
+        <div className="relative aspect-square bg-gradient-to-br from-primary/20 to-accent/10 flex items-center justify-center overflow-hidden">
+          {img ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={img}
+              alt={product.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <span className="text-4xl font-display font-bold text-primary/40">
+              {product.name.charAt(0)}
+            </span>
+          )}
+          <span className="absolute top-2 right-2 rounded-lg bg-black/70 border border-white/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+            {platformLabel}
+          </span>
+        </div>
+        <div className="p-4 pb-2">
+          <h3 className="font-semibold text-white group-hover:text-primary transition-colors mb-1 line-clamp-1">
+            {product.name}
+          </h3>
+          {(product.shortDescription || product.description) && (
+            <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+              {product.shortDescription || product.description}
+            </p>
+          )}
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Star className="h-3.5 w-3.5 fill-primary text-primary" />
+            {product.rating ?? 0} ({product.reviewCount ?? 0})
+          </div>
+        </div>
+      </Link>
+      <div className="p-4 pt-2 mt-auto flex gap-2">
+        <Button className="flex-1 gap-1.5" size="sm" onClick={onDownload}>
+          <Download className="h-3.5 w-3.5" /> Download
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="border border-primary/30 hover:bg-primary/10 px-3"
+          onClick={onGetKey}
+          aria-label="Get Key"
+        >
+          <Key className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
 
 function GameDetailInner({
   params,
@@ -77,12 +126,13 @@ function GameDetailInner({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = use(params);
-  const searchParams = useSearchParams();
-  const selectedCategory = searchParams.get("category") || "";
-
   const game = GAMES.find((g) => g.slug === slug);
-  const [products, setProducts] = useState<ApiProduct[]>([]);
+
+  const [android, setAndroid] = useState<ApiProduct[]>([]);
+  const [ios, setIos] = useState<ApiProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [keyModalOpen, setKeyModalOpen] = useState(false);
+  const [selectedName, setSelectedName] = useState<string | undefined>();
 
   if (!game) notFound();
 
@@ -93,16 +143,23 @@ function GameDetailInner({
     (async () => {
       try {
         setLoading(true);
-        const q = new URLSearchParams();
-        q.set("gameSlug", game.slug);
-        q.set("limit", "50");
-        if (selectedCategory) q.set("category", selectedCategory);
-        const res = await api.get<{ success: boolean; products: ApiProduct[] }>(
-          `/products?${q.toString()}`
-        );
-        if (!cancelled) setProducts(res.products ?? []);
+        const [aRes, iRes] = await Promise.all([
+          api.get<{ success: boolean; products: ApiProduct[] }>(
+            `/products?gameSlug=${encodeURIComponent(game.slug)}&category=android-resources&limit=50`
+          ),
+          api.get<{ success: boolean; products: ApiProduct[] }>(
+            `/products?gameSlug=${encodeURIComponent(game.slug)}&category=ios-resources&limit=50`
+          ),
+        ]);
+        if (!cancelled) {
+          setAndroid(aRes.products ?? []);
+          setIos(iRes.products ?? []);
+        }
       } catch {
-        if (!cancelled) setProducts([]);
+        if (!cancelled) {
+          setAndroid([]);
+          setIos([]);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -110,195 +167,146 @@ function GameDetailInner({
     return () => {
       cancelled = true;
     };
-  }, [game.slug, selectedCategory]);
+  }, [game.slug]);
 
-  const activeResource = useMemo(
-    () => RESOURCE_TYPES.find((r) => r.slug === selectedCategory),
-    [selectedCategory]
-  );
+  const handleDownload = (p: ApiProduct) => {
+    const url = mediaUrl(p.fileKey);
+    if (url) {
+      triggerDownload(url, p.slug ? `${p.slug}.zip` : "download.zip");
+    } else {
+      toast.info("No file attached. Use Get Key or contact support.");
+      setSelectedName(p.name);
+      setKeyModalOpen(true);
+    }
+  };
 
   return (
-    <div className="section-padding min-h-screen pt-24">
-      <div className="container-max">
-        <nav className="text-sm text-muted-foreground mb-6 flex flex-wrap gap-2 items-center">
-          <Link href="/" className="hover:text-primary">
-            Home
-          </Link>
-          <span>/</span>
-          <Link href="/games" className="hover:text-primary">
-            Games
-          </Link>
-          <span>/</span>
-          <Link href={`/games/${game.slug}`} className="hover:text-primary">
-            {game.shortName}
-          </Link>
-          {activeResource && (
-            <>
-              <span>/</span>
-              <span className="text-white/70">{activeResource.name}</span>
-            </>
-          )}
-        </nav>
+    <>
+      <GetKeyModal
+        open={keyModalOpen}
+        onClose={() => setKeyModalOpen(false)}
+        productName={selectedName}
+      />
 
-        <div className="relative mb-10 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-8 sm:p-10">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent" />
-          <div className="relative">
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/20 text-primary">
-              <Icon className="h-7 w-7" />
-            </div>
-            <h1 className="font-display text-3xl sm:text-4xl font-bold text-white mb-2">
-              {game.name}
-            </h1>
-            <p className="text-muted-foreground max-w-2xl">
-              {activeResource
-                ? `${activeResource.name} for ${game.shortName}`
-                : `Choose a resource type for ${game.shortName} — Android, iOS, HUD presets, sensitivity packs and more.`}
-            </p>
-          </div>
-        </div>
+      <div className="section-padding min-h-screen pt-24">
+        <div className="container-max">
+          <nav className="text-sm text-muted-foreground mb-6 flex flex-wrap gap-2 items-center">
+            <Link href="/" className="hover:text-primary">
+              Home
+            </Link>
+            <span>/</span>
+            <Link href="/games" className="hover:text-primary">
+              Games
+            </Link>
+            <span>/</span>
+            <span className="text-white/70">{game.shortName}</span>
+          </nav>
 
-        {/* Resource types for this game */}
-        {!selectedCategory && (
-          <>
-            <h2 className="text-xl font-bold text-white mb-6">
-              Resources for {game.shortName}
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-10">
-              {RESOURCE_TYPES.map((res, i) => {
-                const RIcon = resourceIconMap[res.icon] ?? Package;
-                return (
-                  <motion.div
-                    key={res.slug}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03 }}
-                  >
-                    <Link
-                      href={`/games/${game.slug}?category=${res.slug}`}
-                      className="group block rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center transition-all hover:border-primary/40 hover:bg-primary/5"
-                    >
-                      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary group-hover:scale-110 transition-transform">
-                        <RIcon className="h-6 w-6" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-white group-hover:text-primary transition-colors">
-                        {res.name}
-                      </h3>
-                    </Link>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {/* Products for game (+ optional category) */}
-        {selectedCategory && (
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-              <h2 className="text-xl font-bold text-white">
-                {activeResource?.name ?? "Resources"}
-              </h2>
+          <div className="relative mb-10 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-8 sm:p-10">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent" />
+            <div className="relative">
               <Link
-                href={`/games/${game.slug}`}
-                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary"
+                href="/games"
+                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary mb-4"
               >
-                <ArrowLeft className="h-4 w-4" /> All resource types
+                <ArrowLeft className="h-4 w-4" /> All games
               </Link>
-            </div>
-
-            {loading ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/20 text-primary">
+                <Icon className="h-7 w-7" />
               </div>
-            ) : products.length === 0 ? (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
-                <p className="text-muted-foreground">
-                  No products in this category for {game.shortName} yet.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {products.map((p) => {
-                  const img = p.images?.[0] ? mediaUrl(p.images[0]) : null;
-                  return (
-                    <Link
-                      key={p.id}
-                      href={`/products/${p.slug}`}
-                      className="group block rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden transition-all hover:border-primary/40"
-                    >
-                      <div className="aspect-square bg-gradient-to-br from-primary/20 to-accent/10 flex items-center justify-center overflow-hidden">
-                        {img ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={img}
-                            alt={p.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <span className="text-4xl font-display font-bold text-primary/40">
-                            {p.name.charAt(0)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="p-4">
-                        <h3 className="font-semibold text-white group-hover:text-primary mb-1 line-clamp-1">
-                          {p.name}
-                        </h3>
-                        {p.shortDescription && (
-                          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                            {p.shortDescription}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Star className="h-3.5 w-3.5 fill-primary text-primary" />
-                          {p.rating ?? 0} ({p.reviewCount ?? 0})
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* When no category selected, still show a short list of latest for this game */}
-        {!selectedCategory && (
-          <div className="mt-4">
-            <h2 className="text-lg font-semibold text-white mb-4">
-              Latest for {game.shortName}
-            </h2>
-            {loading ? (
-              <div className="flex justify-center py-10">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            ) : products.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No products for this game yet. Pick a resource type above once
-                items are added in admin.
+              <h1 className="font-display text-3xl sm:text-4xl font-bold text-white mb-2">
+                {game.name}
+              </h1>
+              <p className="text-muted-foreground max-w-2xl">
+                Android and iOS resources for {game.shortName}.
               </p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {products.slice(0, 6).map((p) => (
-                  <Link
-                    key={p.id}
-                    href={`/products/${p.slug}`}
-                    className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 hover:border-primary/40 transition-colors"
-                  >
-                    <span className="font-medium text-white text-sm">
-                      {p.name}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            )}
+            </div>
           </div>
-        )}
+
+          {loading ? (
+            <div className="flex justify-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="space-y-14">
+              {android.length > 0 && (
+                <section>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                      <Smartphone className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-white">
+                        Android Resources
+                      </h2>
+                      <p className="text-xs text-muted-foreground">
+                        {android.length} file{android.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                    {android.map((p) => (
+                      <ProductCard
+                        key={p.id}
+                        product={p}
+                        platformLabel="Android"
+                        onDownload={() => handleDownload(p)}
+                        onGetKey={() => {
+                          setSelectedName(p.name);
+                          setKeyModalOpen(true);
+                        }}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {ios.length > 0 && (
+                <section>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                      <Tablet className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-white">
+                        iOS Resources
+                      </h2>
+                      <p className="text-xs text-muted-foreground">
+                        {ios.length} file{ios.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                    {ios.map((p) => (
+                      <ProductCard
+                        key={p.id}
+                        product={p}
+                        platformLabel="iOS"
+                        onDownload={() => handleDownload(p)}
+                        onGetKey={() => {
+                          setSelectedName(p.name);
+                          setKeyModalOpen(true);
+                        }}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {!loading && android.length === 0 && ios.length === 0 && (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center">
+                  <p className="text-muted-foreground">
+                    No Android or iOS resources for {game.shortName} yet.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
-
 
 export default function GameDetailPage(props: {
   params: Promise<{ slug: string }>;

@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { Star, Download, Key, Search, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CATEGORIES } from "@/lib/constants";
+import { PLATFORMS } from "@/lib/constants";
 import { GetKeyModal } from "@/components/ui/GetKeyModal";
 import { api } from "@/lib/api";
 import type { Product } from "@/types";
@@ -148,7 +148,7 @@ export default function ProductsPage() {
               >
                 All
               </Button>
-              {CATEGORIES.slice(0, 8).map((c) => (
+              {PLATFORMS.map((c) => (
                 <Button
                   key={c.slug}
                   variant={category === c.slug ? "default" : "ghost"}

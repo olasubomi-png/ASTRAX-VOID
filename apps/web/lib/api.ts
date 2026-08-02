@@ -2,10 +2,9 @@
  * ASTRAX-VOID API client
  *
  * All API requests must go through this module — never use raw URLs.
- * Set NEXT_PUBLIC_API_URL in your environment:
- *   - Development: http://localhost:4000/api   (direct to Express)
- *   - Production:  http://34.201.64.198/api    (via Nginx proxy)
- *   - With domain: https://yourdomain.com/api
+ * NEXT_PUBLIC_API_URL is set per environment:
+ *   - Replit dev : /api-proxy  (rewritten by next.config.mjs → localhost:4000/api)
+ *   - Vercel prod: /api-proxy  (rewritten by vercel.json → http://34.201.64.198/api)
  */
 
 const API_BASE =
@@ -17,6 +16,26 @@ if (!API_BASE && typeof window !== "undefined") {
   );
 }
 
+// ─── Auth helpers (browser-only) ──────────────────────────────────────────
+
+function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("token");
+}
+
+export function setAuthToken(token: string) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem("token", token);
+  }
+}
+
+export function clearAuthToken() {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+  }
+}
+
 // ─── Core fetch wrapper ────────────────────────────────────────────────────
 
 interface RequestOptions extends Omit<RequestInit, "body"> {
@@ -26,13 +45,19 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
 
+  const authHeaders: Record<string, string> = {};
+  const token = getAuthToken();
+  if (token) {
+    authHeaders["Authorization"] = `Bearer ${token}`;
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...rest,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders,
       ...headers,
     },
-    credentials: "include",
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 
@@ -64,7 +89,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 // ─── Convenience methods ───────────────────────────────────────────────────
 
 export const api = {
-  /** Base URL — use when you need to construct a URL manually (e.g. redirect). */
+  /** Base URL — use when you need to construct a URL manually. */
   baseUrl: API_BASE,
 
   get<T>(path: string, options?: Omit<RequestOptions, "body">): Promise<T> {

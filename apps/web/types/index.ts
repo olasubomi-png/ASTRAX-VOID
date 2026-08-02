@@ -4,7 +4,8 @@ export type ProductCategory =
   | "unlock-tools"
   | "accounts"
   | "bundles"
-  | "gift-cards";
+  | "gift-cards"
+  | string; // allow any string from DB
 
 export interface Product {
   id: string;
@@ -12,29 +13,30 @@ export interface Product {
   name: string;
   description: string;
   shortDescription?: string;
-  price: number;
+  /** Kept for compatibility with existing data — not displayed in the UI */
+  price?: number;
+  /** Kept for compatibility with existing data — not displayed in the UI */
   salePrice?: number | null;
-  currency: string;
+  currency?: string;
   category: ProductCategory;
   images: string[];
   videoUrl?: string | null;
   features: string[];
   requirements?: string[];
-  stock: number | null; // null = unlimited
+  stock?: number | null;
   rating: number;
   reviewCount: number;
   isFeatured: boolean;
   isTrending: boolean;
   tags: string[];
+  /** URL or R2 key for the downloadable file */
+  fileKey?: string | null;
+  fileUrl?: string | null;
   downloads?: number;
+  isActive?: boolean;
+  categoryId?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface CartItem {
-  productId: string;
-  product: Product;
-  quantity: number;
 }
 
 export interface User {
@@ -46,28 +48,6 @@ export interface User {
   createdAt: string;
 }
 
-export interface Order {
-  id: string;
-  userId: string;
-  items: OrderItem[];
-  total: number;
-  currency: string;
-  status: "PENDING" | "PAID" | "DELIVERED" | "CANCELLED" | "REFUNDED";
-  paymentMethod: "PAYSTACK" | "FLUTTERWAVE" | "STRIPE";
-  paymentRef?: string;
-  createdAt: string;
-}
-
-export interface OrderItem {
-  productId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  downloadUrl?: string;
-  licenseKey?: string;
-  expiresAt?: string;
-}
-
 export interface Review {
   id: string;
   productId: string;
@@ -76,15 +56,4 @@ export interface Review {
   rating: number;
   comment: string;
   createdAt: string;
-}
-
-export interface Coupon {
-  code: string;
-  type: "PERCENTAGE" | "FIXED";
-  value: number;
-  minAmount?: number;
-  maxUses?: number;
-  usedCount: number;
-  expiresAt?: string;
-  isActive: boolean;
 }

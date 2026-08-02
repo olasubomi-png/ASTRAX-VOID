@@ -3,5 +3,14 @@
   "framework": "nextjs",
   "installCommand": "pnpm install",
   "buildCommand": "pnpm build",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "env": {
+    "NEXT_PUBLIC_API_URL": "/api-proxy"
+  },
+  "rewrites": [
+    {
+      "source": "/api-proxy/:path*",
+      "destination": "http://34.201.64.198/api/:path*"
+    }
+  ]
 }

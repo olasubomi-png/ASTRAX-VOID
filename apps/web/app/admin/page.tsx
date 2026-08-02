@@ -1,22 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Package,
   ShoppingBag,
   Users,
-  Ticket,
   Settings,
   DollarSign,
   TrendingUp,
   Loader2,
   RefreshCw,
   ServerCrash,
+  LogOut,
+  Ticket,
 } from "lucide-react";
-import { api } from "@/lib/api";
-import { formatPrice } from "@/lib/utils";
+import { api, clearAuthToken } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 
 interface AdminStats {
   users: number;
@@ -34,65 +36,64 @@ const links = [
 ];
 
 export default function AdminPage() {
+  const router = useRouter();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await api.get<{ success: boolean; stats: AdminStats }>("/admin/stats");
-        if (!cancelled) setStats(res.stats);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load stats");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  const loadStats = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await api.get<{ success: boolean; stats: AdminStats }>("/admin/stats");
+      setStats(res.stats);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load stats");
+    } finally {
+      setLoading(false);
     }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
+  const handleLogout = async () => {
+    clearAuthToken();
+    // Clear cookie
+    document.cookie = "admin_auth=; path=/; max-age=0";
+    try {
+      await fetch("/api/admin-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "logout" }),
+      });
+    } catch {
+      // ignore
+    }
+    router.push("/admin/login");
+  };
+
   const cards = [
-    {
-      label: "Revenue",
-      value: stats ? formatPrice(stats.revenue) : "—",
-      icon: DollarSign,
-    },
-    {
-      label: "Orders",
-      value: stats ? stats.orders.toLocaleString() : "—",
-      icon: ShoppingBag,
-    },
-    {
-      label: "Customers",
-      value: stats ? stats.users.toLocaleString() : "—",
-      icon: Users,
-    },
-    {
-      label: "Products",
-      value: stats ? stats.products.toLocaleString() : "—",
-      icon: Package,
-    },
+    { label: "Revenue", value: stats ? `$${stats.revenue.toLocaleString()}` : "—", icon: DollarSign },
+    { label: "Orders", value: stats ? stats.orders.toLocaleString() : "—", icon: ShoppingBag },
+    { label: "Customers", value: stats ? stats.users.toLocaleString() : "—", icon: Users },
+    { label: "Products", value: stats ? stats.products.toLocaleString() : "—", icon: Package },
   ];
 
   return (
     <div className="section-padding">
       <div className="container-max">
-        <div className="mb-10">
-          <h1 className="font-display text-3xl md:text-4xl font-bold mb-1">
-            Admin <span className="neon-text">Panel</span>
-          </h1>
-          <p className="text-muted-foreground">Manage your marketplace</p>
+        <div className="flex items-center justify-between mb-10 flex-wrap gap-4">
+          <div>
+            <h1 className="font-display text-3xl md:text-4xl font-bold mb-1">
+              Admin <span className="neon-text">Panel</span>
+            </h1>
+            <p className="text-muted-foreground">Manage your marketplace</p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2 text-muted-foreground hover:text-red-400">
+            <LogOut className="h-4 w-4" /> Logout
+          </Button>
         </div>
 
         {error && (
@@ -101,23 +102,11 @@ export default function AdminPage() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-red-400">Unable to reach server</p>
               <p className="text-xs text-red-400/70 mt-0.5">
-                Stats could not be loaded. Check that the API is reachable and try again.
+                Stats could not be loaded. Verify the API is reachable and your account has ADMIN role.
               </p>
             </div>
             <button
-              onClick={() => {
-                setError(null);
-                setLoading(true);
-                api
-                  .get<{ success: boolean; stats: AdminStats }>("/admin/stats")
-                  .then((res) => setStats(res.stats))
-                  .catch((err: unknown) =>
-                    setError(
-                      err instanceof Error ? err.message : "Failed to load stats"
-                    )
-                  )
-                  .finally(() => setLoading(false));
-              }}
+              onClick={loadStats}
               className="shrink-0 flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20 transition-colors"
             >
               <RefreshCw className="h-3.5 w-3.5" />
@@ -153,7 +142,7 @@ export default function AdminPage() {
           ))}
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {links.map((l, i) => (
             <motion.div
               key={l.href}

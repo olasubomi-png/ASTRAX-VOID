@@ -4,16 +4,14 @@ import Link from "next/link";
 import Image from "next/image";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, ShoppingCart, Search, User, ChevronDown } from "lucide-react";
+import { Menu, X, Download, Search, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NAV_LINKS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { useCartStore } from "@/hooks/useCartStore";
 
 export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const cartCount = useCartStore((s) => s.items.reduce((a, i) => a + i.quantity, 0));
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -67,25 +65,20 @@ export function Header() {
             <Search className="h-5 w-5" />
           </Button>
 
-          <Link href="/cart" className="relative">
-            <Button variant="ghost" size="icon" aria-label="Cart">
-              <ShoppingCart className="h-5 w-5" />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
-                  {cartCount}
-                </span>
-              )}
-            </Button>
-          </Link>
-
           <Link href="/login" className="hidden sm:block">
             <Button variant="ghost" size="icon" aria-label="Account">
               <User className="h-5 w-5" />
             </Button>
           </Link>
 
+          <Link href="/downloads" className="hidden sm:block">
+            <Button variant="ghost" size="icon" aria-label="Downloads">
+              <Download className="h-5 w-5" />
+            </Button>
+          </Link>
+
           <Link href="/products" className="hidden md:block">
-            <Button size="sm">Shop Now</Button>
+            <Button size="sm">Get Files</Button>
           </Link>
 
           {/* Mobile menu toggle */}
@@ -128,7 +121,9 @@ export function Header() {
                   </Button>
                 </Link>
                 <Link href="/products" onClick={() => setMobileOpen(false)}>
-                  <Button className="w-full">Shop Now</Button>
+                  <Button className="w-full">
+                    <Download className="mr-2 h-4 w-4" /> Get Files
+                  </Button>
                 </Link>
               </div>
             </nav>

@@ -44,9 +44,24 @@ const PORT = Number(process.env.PORT) || 4000;
 
 // Security
 app.use(helmet());
+// CORS — accept comma-separated list of allowed origins so both Vercel
+// and local dev can be whitelisted with a single env var, e.g.:
+//   CORS_ORIGIN=https://astrax-void-web-upz5.vercel.app,http://localhost:5000
+const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    origin: (origin, cb) => {
+      // Allow requests with no origin (mobile apps, curl, same-origin SSR)
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      // Also allow if CORS_ORIGIN is a wildcard "*"
+      if (allowedOrigins.includes("*")) return cb(null, true);
+      cb(new Error(`CORS: origin '${origin}' not allowed`));
+    },
     credentials: true,
   })
 );

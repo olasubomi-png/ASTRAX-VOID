@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, setAuthToken } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,13 +26,16 @@ export default function LoginPage() {
         user: { id: string; email: string; username: string; role: string };
       }>("/auth/login", { email, password });
 
-      // Store token + user
-      localStorage.setItem("token", res.token);
+      setAuthToken(res.token);
       localStorage.setItem("user", JSON.stringify(res.user));
+
+      // Set cookie so admin middleware can detect login
+      if (res.user.role === "ADMIN") {
+        document.cookie = `admin_auth=${res.token}; path=/; SameSite=Lax; max-age=${60 * 60 * 24 * 7}`;
+      }
 
       toast.success(`Welcome back, ${res.user.username}!`);
 
-      // Redirect based on role
       if (res.user.role === "ADMIN") {
         router.push("/admin");
       } else {

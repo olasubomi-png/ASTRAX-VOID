@@ -61,15 +61,19 @@ const EMPTY_FORM: ProductForm = {
 };
 
 function formToPayload(f: ProductForm) {
+  const baseSlug = f.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   return {
     name: f.name.trim(),
     description: f.description.trim(),
     shortDescription: f.shortDescription.trim() || undefined,
-    slug: f.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    slug: baseSlug || `product-${Date.now()}`,
+    // categorySlug is resolved to categoryId on the API
+    categorySlug: f.categorySlug.trim() || undefined,
     images: f.imageUrl ? [f.imageUrl.trim()] : [],
     fileKey: f.fileUrl.trim() || undefined,
     tags: f.tags ? f.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
     features: f.features ? f.features.split("\n").map((t) => t.trim()).filter(Boolean) : [],
+    requirements: [] as string[],
     isFeatured: f.isFeatured,
     isTrending: f.isTrending,
     price: 0,          // required by DB schema; platform is free
@@ -304,6 +308,7 @@ function ProductModal({
                 className="w-full appearance-none rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary pr-8"
                 value={form.categorySlug}
                 onChange={(e) => set("categorySlug", e.target.value)}
+                required
               >
                 <option value="">Select category…</option>
                 {CATEGORIES.map((c) => (
@@ -486,20 +491,40 @@ export default function AdminProductsPage() {
   useEffect(() => { load(); }, [load]);
 
   const handleAdd = async (form: ProductForm) => {
+    if (!form.categorySlug.trim()) {
+      toast.error("Please select a category");
+      return;
+    }
     const payload = formToPayload(form);
-    await api.post("/admin/products", payload);
-    toast.success("Product added!");
-    setShowAdd(false);
-    load();
+    try {
+      await api.post("/admin/products", payload);
+      toast.success("Product added!");
+      setShowAdd(false);
+      load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to add product";
+      toast.error(msg);
+      throw err; // keep modal open
+    }
   };
 
   const handleEdit = async (form: ProductForm) => {
     if (!editProduct) return;
+    if (!form.categorySlug.trim()) {
+      toast.error("Please select a category");
+      return;
+    }
     const payload = formToPayload(form);
-    await api.patch(`/admin/products/${editProduct.id}`, payload);
-    toast.success("Product updated!");
-    setEditProduct(null);
-    load();
+    try {
+      await api.patch(`/admin/products/${editProduct.id}`, payload);
+      toast.success("Product updated!");
+      setEditProduct(null);
+      load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to update product";
+      toast.error(msg);
+      throw err;
+    }
   };
 
   const handleToggleActive = async (p: ApiProduct) => {

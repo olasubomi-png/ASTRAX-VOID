@@ -90,7 +90,8 @@
   .card-glow::before {
     content: "";
     @apply absolute inset-0 opacity-0 transition-opacity duration-500
-           bg-gradient-to-br from-primary/10 via-transparent to-accent/5;
+           bg-gradient-to-br from-primary/10 via-transparent to-accent/5
+           pointer-events-none;
   }
 
   .card-glow:hover::before {

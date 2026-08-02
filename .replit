@@ -23,8 +23,11 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run dev:web"
-waitForPort = 3000
+args = "pnpm --filter @astrax-void/web run dev"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [userenv]
 
@@ -36,3 +39,7 @@ NEXT_PUBLIC_APP_URL = "http://localhost:3000"
 [[ports]]
 localPort = 3000
 externalPort = 80
+
+[[ports]]
+localPort = 5000
+externalPort = 5000

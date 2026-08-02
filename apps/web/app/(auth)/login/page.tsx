@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { api } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,13 +18,29 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
     try {
-      // TODO: call /api/auth/login
-      await new Promise((r) => setTimeout(r, 800));
-      toast.success("Welcome back, commander.");
-      router.push("/dashboard");
-    } catch {
-      toast.error("Invalid credentials");
+      const res = await api.post<{
+        success: boolean;
+        token: string;
+        user: { id: string; email: string; username: string; role: string };
+      }>("/auth/login", { email, password });
+
+      // Store token + user
+      localStorage.setItem("token", res.token);
+      localStorage.setItem("user", JSON.stringify(res.user));
+
+      toast.success(`Welcome back, ${res.user.username}!`);
+
+      // Redirect based on role
+      if (res.user.role === "ADMIN") {
+        router.push("/admin");
+      } else {
+        router.push("/dashboard");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid credentials";
+      toast.error(message.includes("401") ? "Invalid email or password" : message);
     } finally {
       setLoading(false);
     }
@@ -41,7 +58,9 @@ export default function LoginPage() {
             <h1 className="font-display text-2xl font-bold mb-1">
               Welcome <span className="neon-text">Back</span>
             </h1>
-            <p className="text-sm text-muted-foreground">Sign in to your ASTRAX-VOID account</p>
+            <p className="text-sm text-muted-foreground">
+              Sign in to your ASTRAX-VOID account
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

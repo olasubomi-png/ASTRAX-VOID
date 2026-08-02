@@ -7,6 +7,8 @@ router.get("/", async (req, res, next) => {
   try {
     const {
       category,
+      game,
+      gameSlug,
       search,
       sort = "newest",
       minPrice,
@@ -17,6 +19,8 @@ router.get("/", async (req, res, next) => {
 
     const where: any = { isActive: true };
     if (category) where.category = { slug: category as string };
+    const gameFilter = (gameSlug || game) as string | undefined;
+    if (gameFilter) where.gameSlug = gameFilter;
     if (search) {
       where.OR = [
         { name: { contains: search as string, mode: "insensitive" } },

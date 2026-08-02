@@ -57,7 +57,7 @@ export default function GameDetailPage({
       try {
         // Filter by tag matching game slug / shortName until Product.game exists in schema
         const res = await api.get<{ success: boolean; products: Product[] }>(
-          `/products?search=${encodeURIComponent(game.shortName)}&limit=24`
+          `/products?gameSlug=${encodeURIComponent(game.slug)}&limit=24`
         );
         if (!cancelled) setProducts(res.products ?? []);
       } catch {

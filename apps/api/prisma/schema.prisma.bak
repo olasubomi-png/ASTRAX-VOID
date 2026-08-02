@@ -78,7 +78,6 @@ model Product {
   salePrice        Float?
   currency         String   @default("USD")
   categoryId       String   @db.ObjectId
-  gameSlug         String?  // e.g. blood-strike, codm-global (matches GAMES.slug)
   images           String[]
   videoUrl         String?
   features         String[]

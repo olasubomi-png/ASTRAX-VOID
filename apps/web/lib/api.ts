@@ -50,6 +50,8 @@ function getAuthToken(): string | null {
 export function setAuthToken(token: string) {
   if (typeof window !== "undefined") {
     localStorage.setItem("token", token);
+    // Cookie so middleware can require login before showing the site
+    document.cookie = `user_auth=${token}; path=/; SameSite=Lax; max-age=${60 * 60 * 24 * 7}`;
   }
 }
 
@@ -58,6 +60,8 @@ export function clearAuthToken() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.removeItem("adminToken");
+    document.cookie = "user_auth=; path=/; max-age=0";
+    document.cookie = "admin_auth=; path=/; max-age=0";
   }
 }
 

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,17 +30,14 @@ export default function LoginPage() {
       setAuthToken(res.token);
       localStorage.setItem("user", JSON.stringify(res.user));
 
-      // Set cookie so admin middleware can detect login
-      if (res.user.role === "ADMIN") {
-        document.cookie = `admin_auth=${res.token}; path=/; SameSite=Lax; max-age=${60 * 60 * 24 * 7}`;
-      }
-
+      // Always set user_auth cookie (setAuthToken) so site gate opens
       toast.success(`Welcome back, ${res.user.username}!`);
 
       if (res.user.role === "ADMIN") {
+        document.cookie = `admin_auth=${res.token}; path=/; SameSite=Lax; max-age=${60 * 60 * 24 * 7}`;
         router.push("/admin");
       } else {
-        router.push("/dashboard");
+        router.push("/");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Invalid credentials";

@@ -58,9 +58,10 @@ export default function RegisterPage() {
       toast.success("Account created successfully!");
 
       if (res.user.role === "ADMIN") {
+        document.cookie = `admin_auth=${res.token}; path=/; SameSite=Lax; max-age=${60 * 60 * 24 * 7}`;
         router.push("/admin");
       } else {
-        router.push("/dashboard");
+        router.push("/");
       }
     } catch (err) {
       const message =

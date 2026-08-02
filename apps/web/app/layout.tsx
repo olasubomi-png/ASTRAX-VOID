@@ -4,6 +4,7 @@ import "./globals.css";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Toaster } from "sonner";
+import { AuthProvider } from "@/lib/auth";
 import { SITE_NAME, SITE_DESCRIPTION, SITE_TAGLINE } from "@/lib/constants";
 
 const inter = Inter({
@@ -73,20 +74,22 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${inter.variable} ${orbitron.variable} font-sans`}>
-        <Header />
-        <main className="relative z-10 min-h-screen pt-16 md:pt-20">{children}</main>
-        <Footer />
-        <Toaster
-          theme="dark"
-          position="top-right"
-          toastOptions={{
-            style: {
-              background: "rgba(15,15,20,0.95)",
-              border: "1px solid rgba(139,92,246,0.3)",
-              color: "#fff",
-            },
-          }}
-        />
+        <AuthProvider>
+          <Header />
+          <main className="relative z-10 min-h-screen pt-16 md:pt-20">{children}</main>
+          <Footer />
+          <Toaster
+            theme="dark"
+            position="top-right"
+            toastOptions={{
+              style: {
+                background: "rgba(15,15,20,0.95)",
+                border: "1px solid rgba(139,92,246,0.3)",
+                color: "#fff",
+              },
+            }}
+          />
+        </AuthProvider>
       </body>
     </html>
   );

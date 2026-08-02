@@ -50,8 +50,11 @@ function getAuthToken(): string | null {
 export function setAuthToken(token: string) {
   if (typeof window !== "undefined") {
     localStorage.setItem("token", token);
-    // Cookie so middleware can require login before showing the site
-    document.cookie = `user_auth=${token}; path=/; SameSite=Lax; max-age=${60 * 60 * 24 * 7}`;
+    // Encode JWT — raw tokens can break cookie parsing and middleware auth
+    const enc = encodeURIComponent(token);
+    const maxAge = 60 * 60 * 24 * 7;
+    document.cookie = `user_auth=${enc}; path=/; SameSite=Lax; max-age=${maxAge}`;
+    document.cookie = `astrax_session=1; path=/; SameSite=Lax; max-age=${maxAge}`;
   }
 }
 
@@ -62,6 +65,7 @@ export function clearAuthToken() {
     localStorage.removeItem("adminToken");
     document.cookie = "user_auth=; path=/; max-age=0";
     document.cookie = "admin_auth=; path=/; max-age=0";
+    document.cookie = "astrax_session=; path=/; max-age=0";
   }
 }
 

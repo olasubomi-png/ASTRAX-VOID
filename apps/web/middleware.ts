@@ -34,7 +34,9 @@ export function middleware(request: NextRequest) {
 
   const userAuth = request.cookies.get("user_auth")?.value;
   const adminAuth = request.cookies.get("admin_auth")?.value;
-  const isLoggedIn = Boolean(userAuth || adminAuth);
+  const sessionFlag = request.cookies.get("astrax_session")?.value;
+  // Any of these means the client established a session after login/register
+  const isLoggedIn = Boolean(userAuth || adminAuth || sessionFlag === "1");
 
   // Admin area — requires admin_auth specifically
   if (pathname.startsWith("/admin") && !pathname.startsWith("/admin/login")) {

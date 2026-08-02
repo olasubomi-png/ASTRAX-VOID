@@ -129,9 +129,19 @@ async function start() {
   }
 
   app.listen(PORT, () => {
-    console.log(`🚀 ASTRAX-VOID API running on http://localhost:${PORT}`);
-    console.log(`   NODE_ENV : ${process.env.NODE_ENV || "development"}`);
-    console.log(`   CORS     : ${process.env.CORS_ORIGIN || "http://localhost:3000"}`);
+    console.log("");
+    console.log("══════════════════════════════════════════════");
+    console.log("  ASTRAX-VOID API — Startup Report");
+    console.log("══════════════════════════════════════════════");
+    console.log(`  Environment     : ${process.env.NODE_ENV || "development"}`);
+    console.log(`  Port            : ${PORT}`);
+    console.log(`  DATABASE_URL    : ${process.env.DATABASE_URL ? "✓ Loaded" : "✗ MISSING"}`);
+    console.log(`  JWT_SECRET      : ${process.env.JWT_SECRET ? "✓ Loaded" : "✗ MISSING"}`);
+    console.log(`  CORS_ORIGIN     : ${process.env.CORS_ORIGIN ? "✓ Loaded" : "✗ MISSING"}`);
+    console.log(`  Allowed origins : ${allowedOrigins.join(", ") || "(none)"}`);
+    console.log("══════════════════════════════════════════════");
+    console.log(`🚀 API listening on http://0.0.0.0:${PORT}`);
+    console.log("");
   });
 }
 

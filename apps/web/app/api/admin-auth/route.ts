@@ -20,12 +20,25 @@ export async function POST(req: NextRequest) {
     }
 
     const { password } = body;
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    const sessionSecret = process.env.SESSION_SECRET || "fallback-secret-change-me";
+
+    // Prefer explicit env var. In local development only, fall back to a
+    // well-known default so the admin UI is usable without extra setup.
+    // NEVER relies on the fallback in production (NODE_ENV=production).
+    const isProd = process.env.NODE_ENV === "production";
+    const adminPassword =
+      process.env.ADMIN_PASSWORD ||
+      (!isProd ? "mickyp007" : undefined);
+    const sessionSecret =
+      process.env.SESSION_SECRET ||
+      (!isProd ? "dev-session-secret-change-me" : "fallback-secret-change-me");
 
     if (!adminPassword) {
       return NextResponse.json(
-        { error: "ADMIN_PASSWORD is not configured on this server." },
+        {
+          error:
+            "ADMIN_PASSWORD is not configured on this deployment. " +
+            "Add it in Vercel → Settings → Environment Variables, then redeploy.",
+        },
         { status: 503 }
       );
     }

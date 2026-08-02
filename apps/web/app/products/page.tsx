@@ -221,9 +221,6 @@ export default function ProductsPage() {
                           {product.rating} ({product.reviewCount})
                         </span>
                       </div>
-                      <span className="inline-block text-xs font-semibold text-primary bg-primary/10 rounded-lg px-2 py-0.5">
-                        FREE
-                      </span>
                     </Link>
                     <div className="p-4 pt-0 mt-auto flex gap-2">
                       <Button

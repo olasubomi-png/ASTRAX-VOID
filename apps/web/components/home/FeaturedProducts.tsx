@@ -172,7 +172,6 @@ export function FeaturedProducts() {
                         {product.rating} ({product.reviewCount})
                       </span>
                     </div>
-                    <span className="text-xs font-bold text-primary">FREE</span>
                   </Link>
                   <div className="p-4 pt-0 mt-auto flex gap-2">
                     <Button

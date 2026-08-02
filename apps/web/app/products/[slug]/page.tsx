@@ -179,9 +179,6 @@ export default function ProductDetailPage({
                 <span className="text-sm text-muted-foreground">
                   {product.rating} ({product.reviewCount} reviews)
                 </span>
-                <span className="text-xs font-semibold text-primary bg-primary/10 rounded-lg px-2 py-0.5">
-                  FREE
-                </span>
               </div>
               <p className="text-muted-foreground mb-6 leading-relaxed">
                 {product.description}

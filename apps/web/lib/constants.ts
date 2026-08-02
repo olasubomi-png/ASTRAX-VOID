@@ -84,3 +84,15 @@ export const CATEGORIES = [
 export const DISCORD_INVITE = "https://discord.gg/astraxvoid";
 export const TELEGRAM = "https://t.me/ASTRAXVOIDexe";
 export const WHATSAPP = "";
+
+
+/** Public artwork paths for each game (SVG under /public/games) */
+export function gameArt(slug: string) {
+  const base = `/games/${slug}`;
+  return {
+    hero: `${base}/hero.svg`,
+    icon: `${base}/icon.svg`,
+    thumb: `${base}/thumb.svg`,
+    wallpaper: `${base}/wallpaper.svg`,
+  };
+}

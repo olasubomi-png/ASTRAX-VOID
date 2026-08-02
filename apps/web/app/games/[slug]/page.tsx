@@ -5,13 +5,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { motion } from "framer-motion";
 import {
-  Sword,
-  Shield,
-  Crosshair,
-  Target,
-  Flame,
-  Box,
-  Gamepad2,
   Smartphone,
   Tablet,
   ArrowLeft,
@@ -22,20 +15,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GetKeyModal } from "@/components/ui/GetKeyModal";
-import { GAMES } from "@/lib/constants";
+import { GAMES, gameArt } from "@/lib/constants";
 import { api } from "@/lib/api";
 import { mediaUrl, triggerDownload } from "@/lib/utils";
 import { toast } from "sonner";
-
-const gameIconMap: Record<string, React.ElementType> = {
-  Sword,
-  Shield,
-  Crosshair,
-  Target,
-  Flame,
-  Box,
-  Gamepad2,
-};
 
 type ApiProduct = {
   id: string;
@@ -136,8 +119,6 @@ function GameDetailInner({
 
   if (!game) notFound();
 
-  const Icon = gameIconMap[game.icon] ?? Gamepad2;
-
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -202,24 +183,42 @@ function GameDetailInner({
             <span className="text-white/70">{game.shortName}</span>
           </nav>
 
-          <div className="relative mb-10 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-8 sm:p-10">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent" />
-            <div className="relative">
-              <Link
-                href="/games"
-                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary mb-4"
-              >
-                <ArrowLeft className="h-4 w-4" /> All games
-              </Link>
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/20 text-primary">
-                <Icon className="h-7 w-7" />
+          <div className="relative mb-10 overflow-hidden rounded-3xl border border-white/10">
+            <div className="relative aspect-[16/9] sm:aspect-[21/9] max-h-[320px] sm:max-h-[380px] w-full bg-[#0a0614]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={gameArt(game.slug).hero}
+                alt=""
+                className="h-full w-full object-cover"
+                decoding="async"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+              <div className="absolute inset-0 flex flex-col justify-end p-6 sm:p-10">
+                <Link
+                  href="/games"
+                  className="inline-flex items-center gap-1.5 text-sm text-white/70 hover:text-primary mb-4 w-fit"
+                >
+                  <ArrowLeft className="h-4 w-4" /> All games
+                </Link>
+                <div className="flex items-center gap-4 mb-2">
+                  <div className="h-14 w-14 sm:h-16 sm:w-16 overflow-hidden rounded-full border-2 border-primary/50 bg-black shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={gameArt(game.slug).icon}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div>
+                    <h1 className="font-display text-2xl sm:text-4xl font-bold text-white">
+                      {game.name}
+                    </h1>
+                    <p className="text-sm text-white/60 mt-1">
+                      Android &amp; iOS resources for {game.shortName}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <h1 className="font-display text-3xl sm:text-4xl font-bold text-white mb-2">
-                {game.name}
-              </h1>
-              <p className="text-muted-foreground max-w-2xl">
-                Android and iOS resources for {game.shortName}.
-              </p>
             </div>
           </div>
 

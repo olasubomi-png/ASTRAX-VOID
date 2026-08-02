@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="ibg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0614"/>
+      <stop offset="100%" stop-color="#160b28"/>
+    </linearGradient>
+    <linearGradient id="iring" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#64748B"/>
+    </linearGradient>
+    <radialGradient id="iglow" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#ibg)"/>
+  <circle cx="256" cy="256" r="200" fill="url(#iglow)"/>
+  <circle cx="256" cy="256" r="170" fill="none" stroke="url(#iring)" stroke-width="6" opacity="0.85"/>
+  <circle cx="256" cy="256" r="148" fill="none" stroke="#8B5CF6" stroke-width="1.5" opacity="0.35"/>
+  <text x="256" y="278" text-anchor="middle" fill="url(#iring)" font-family="system-ui,sans-serif" font-size="140" font-weight="800">O</text>
+</svg>

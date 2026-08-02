@@ -1,137 +1,103 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Star, Download, Key, Search } from "lucide-react";
+import { Star, Download, Key, Search, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CATEGORIES } from "@/lib/constants";
 import { GetKeyModal } from "@/components/ui/GetKeyModal";
+import { api } from "@/lib/api";
 import type { Product } from "@/types";
 import { toast } from "sonner";
 
-const DEMO_PRODUCTS: Product[] = [
-  {
-    id: "1",
-    slug: "astrax-vip-elite",
-    name: "ASTRAX VIP Elite",
-    description: "Full elite VIP package with premium modules and priority support.",
-    category: "vip-packages",
-    images: [],
-    features: ["Aimbot", "ESP", "Anti-Detection"],
-    rating: 4.9,
-    reviewCount: 342,
-    isFeatured: true,
-    isTrending: true,
-    tags: ["vip"],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    slug: "codm-premium-v5",
-    name: "CODM Premium V5",
-    description: "Latest CODM premium files. Instant delivery.",
-    category: "codm-files",
-    images: [],
-    features: ["Silent Aim", "Wallhack"],
-    rating: 4.8,
-    reviewCount: 891,
-    isFeatured: true,
-    isTrending: true,
-    tags: ["codm"],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "3",
-    slug: "unlock-tool-pro",
-    name: "Unlock Tool Pro",
-    description: "Professional unlock toolkit.",
-    category: "unlock-tools",
-    images: [],
-    features: ["Multi-game", "HWID Spoofer"],
-    rating: 4.7,
-    reviewCount: 215,
-    isFeatured: true,
-    isTrending: false,
-    tags: ["tools"],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "4",
-    slug: "bundle-dominator",
-    name: "Dominator Bundle",
-    description: "VIP + CODM + Tools package.",
-    category: "bundles",
-    images: [],
-    features: ["All VIP", "CODM Premium", "Tools"],
-    rating: 5.0,
-    reviewCount: 67,
-    isFeatured: true,
-    isTrending: true,
-    tags: ["bundle"],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "5",
-    slug: "codm-xtreme-v5",
-    name: "CODM Xtreme V5",
-    description: "Maximum aggression CODM package.",
-    category: "codm-files",
-    images: [],
-    features: ["Aimbot", "Speed", "ESP"],
-    rating: 4.85,
-    reviewCount: 456,
-    isFeatured: true,
-    isTrending: true,
-    tags: ["codm"],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "6",
-    slug: "sensitivity-pack-pro",
-    name: "Sensitivity Pack Pro",
-    description: "Optimised sensitivity configs for competitive play.",
-    category: "game-configuration-packs",
-    images: [],
-    features: ["All devices", "Multiple games", "Regular updates"],
-    rating: 4.6,
-    reviewCount: 312,
-    isFeatured: false,
-    isTrending: true,
-    tags: ["config"],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+/** Map API product (category may be object) → frontend Product */
+function mapApiProduct(p: any): Product {
+  const categorySlug =
+    typeof p.category === "string"
+      ? p.category
+      : p.category?.slug || p.categoryId || "uncategorized";
+  const fileKey = p.fileKey || null;
+  // fileKey may already be a full URL from upload
+  const fileUrl =
+    p.fileUrl ||
+    (fileKey && /^https?:\/\//i.test(fileKey) ? fileKey : null);
+
+  return {
+    id: p.id,
+    slug: p.slug,
+    name: p.name,
+    description: p.description || "",
+    shortDescription: p.shortDescription || undefined,
+    price: p.price,
+    salePrice: p.salePrice,
+    currency: p.currency,
+    category: categorySlug,
+    images: Array.isArray(p.images) ? p.images : [],
+    videoUrl: p.videoUrl,
+    features: Array.isArray(p.features) ? p.features : [],
+    requirements: Array.isArray(p.requirements) ? p.requirements : [],
+    stock: p.stock,
+    rating: typeof p.rating === "number" ? p.rating : 0,
+    reviewCount: typeof p.reviewCount === "number" ? p.reviewCount : 0,
+    isFeatured: Boolean(p.isFeatured),
+    isTrending: Boolean(p.isTrending),
+    tags: Array.isArray(p.tags) ? p.tags : [],
+    fileKey,
+    fileUrl,
+    isActive: p.isActive,
+    categoryId: p.categoryId,
+    createdAt: p.createdAt || new Date().toISOString(),
+    updatedAt: p.updatedAt || new Date().toISOString(),
+  };
+}
 
 export default function ProductsPage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("all");
   const [keyModalOpen, setKeyModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
-  const filtered = DEMO_PRODUCTS.filter((p) => {
-    const matchSearch =
-      !search ||
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.description.toLowerCase().includes(search.toLowerCase());
-    const matchCat = category === "all" || p.category === category;
-    return matchSearch && matchCat;
-  });
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const params = new URLSearchParams();
+      params.set("limit", "100");
+      params.set("sort", "newest");
+      if (category !== "all") params.set("category", category);
+      if (search.trim()) params.set("search", search.trim());
+
+      const res = await api.get<{ success: boolean; products: any[] }>(
+        `/products?${params.toString()}`
+      );
+      setProducts((res.products || []).map(mapApiProduct));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load products");
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [category, search]);
+
+  useEffect(() => {
+    const t = setTimeout(load, search ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [load, search]);
 
   const handleDownload = (product: Product) => {
-    if (product.fileUrl) {
-      window.open(product.fileUrl, "_blank");
+    const url = product.fileUrl || product.fileKey;
+    if (url && /^https?:\/\//i.test(url)) {
+      window.open(url, "_blank");
     } else {
-      toast.info("Contact us via WhatsApp or Telegram to receive your download link.", {
-        duration: 4000,
-      });
+      toast.info(
+        "Contact us via WhatsApp or Telegram to receive your download link.",
+        { duration: 4000 }
+      );
       setSelectedProduct(product);
       setKeyModalOpen(true);
     }
@@ -156,7 +122,9 @@ export default function ProductsPage() {
             <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">
               All <span className="neon-text">Products</span>
             </h1>
-            <p className="text-muted-foreground">Premium digital arsenal — 100% free to download</p>
+            <p className="text-muted-foreground">
+              Premium digital arsenal — 100% free to download
+            </p>
           </div>
 
           {/* Filters */}
@@ -178,7 +146,7 @@ export default function ProductsPage() {
               >
                 All
               </Button>
-              {CATEGORIES.slice(0, 6).map((c) => (
+              {CATEGORIES.slice(0, 8).map((c) => (
                 <Button
                   key={c.slug}
                   variant={category === c.slug ? "default" : "ghost"}
@@ -191,70 +159,97 @@ export default function ProductsPage() {
             </div>
           </div>
 
-          {/* Grid */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filtered.map((product, i) => (
-              <motion.div
-                key={product.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className="card-glow group flex flex-col"
-              >
-                <Link href={`/products/${product.slug}`} className="block p-4">
-                  <div className="relative aspect-square rounded-xl bg-gradient-to-br from-primary/20 to-accent/10 mb-4 flex items-center justify-center overflow-hidden">
-                    {product.images[0] ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-4xl font-display font-bold text-primary/40">
-                        {product.name.charAt(0)}
-                      </span>
-                    )}
-                    {product.isTrending && (
-                      <span className="absolute top-2 left-2 rounded-lg bg-primary px-2 py-0.5 text-xs font-bold text-white">
-                        HOT
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="font-semibold text-white group-hover:text-primary transition-colors mb-1 line-clamp-1">
-                    {product.name}
-                  </h3>
-                  <div className="flex items-center gap-1 mb-1">
-                    <Star className="h-3.5 w-3.5 fill-primary text-primary" />
-                    <span className="text-xs text-muted-foreground">
-                      {product.rating} ({product.reviewCount})
-                    </span>
-                  </div>
-                  <span className="inline-block text-xs font-semibold text-primary bg-primary/10 rounded-lg px-2 py-0.5">
-                    FREE
-                  </span>
-                </Link>
-                <div className="p-4 pt-0 mt-auto flex gap-2">
-                  <Button
-                    className="flex-1 gap-2"
-                    size="sm"
-                    onClick={() => handleDownload(product)}
-                  >
-                    <Download className="h-4 w-4" /> Download
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="flex-1 gap-2 border border-primary/30 hover:bg-primary/10"
-                    onClick={() => handleGetKey(product)}
-                  >
-                    <Key className="h-4 w-4" /> Get Key
-                  </Button>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
-          {filtered.length === 0 && (
-            <div className="text-center py-20 text-muted-foreground">
-              No products found. Try a different search or category.
+          {loading && (
+            <div className="flex justify-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
+          )}
+
+          {error && !loading && (
+            <div className="text-center py-12 text-red-400 text-sm">
+              {error}
+              <div className="mt-3">
+                <Button size="sm" variant="ghost" onClick={load}>
+                  Retry
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {!loading && !error && (
+            <>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {products.map((product, i) => (
+                  <motion.div
+                    key={product.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(i * 0.04, 0.4) }}
+                    className="card-glow group flex flex-col"
+                  >
+                    <Link
+                      href={`/products/${product.slug}`}
+                      className="block p-4"
+                    >
+                      <div className="relative aspect-square rounded-xl bg-gradient-to-br from-primary/20 to-accent/10 mb-4 flex items-center justify-center overflow-hidden">
+                        {product.images[0] ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={product.images[0]}
+                            alt={product.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-4xl font-display font-bold text-primary/40">
+                            {product.name.charAt(0)}
+                          </span>
+                        )}
+                        {product.isTrending && (
+                          <span className="absolute top-2 left-2 rounded-lg bg-primary px-2 py-0.5 text-xs font-bold text-white">
+                            HOT
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="font-semibold text-white group-hover:text-primary transition-colors mb-1 line-clamp-1">
+                        {product.name}
+                      </h3>
+                      <div className="flex items-center gap-1 mb-1">
+                        <Star className="h-3.5 w-3.5 fill-primary text-primary" />
+                        <span className="text-xs text-muted-foreground">
+                          {product.rating} ({product.reviewCount})
+                        </span>
+                      </div>
+                      <span className="inline-block text-xs font-semibold text-primary bg-primary/10 rounded-lg px-2 py-0.5">
+                        FREE
+                      </span>
+                    </Link>
+                    <div className="p-4 pt-0 mt-auto flex gap-2">
+                      <Button
+                        className="flex-1 gap-2"
+                        size="sm"
+                        onClick={() => handleDownload(product)}
+                      >
+                        <Download className="h-4 w-4" /> Download
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 gap-2 border border-primary/30 hover:bg-primary/10"
+                        onClick={() => handleGetKey(product)}
+                      >
+                        <Key className="h-4 w-4" /> Get Key
+                      </Button>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+
+              {products.length === 0 && (
+                <div className="text-center py-20 text-muted-foreground">
+                  No products found. Try a different search or category.
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

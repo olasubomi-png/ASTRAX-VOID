@@ -1,88 +1,88 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Star, Download, Key } from "lucide-react";
+import { Star, Download, Key, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GetKeyModal } from "@/components/ui/GetKeyModal";
+import { api } from "@/lib/api";
 import type { Product } from "@/types";
 import { toast } from "sonner";
 
-const FEATURED: Product[] = [
-  {
-    id: "1",
-    slug: "astrax-vip-elite",
-    name: "ASTRAX VIP Elite",
-    description: "Full elite VIP package with premium modules and priority support.",
-    category: "vip-packages",
-    images: ["/logo.png"],
-    features: ["Aimbot", "ESP", "Anti-Detection", "24/7 Support"],
-    rating: 4.9,
-    reviewCount: 342,
-    isFeatured: true,
-    isTrending: true,
-    tags: ["vip", "elite"],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    slug: "codm-premium-v5",
-    name: "CODM Premium V5",
-    description: "Latest CODM premium files. Instant delivery, undetected.",
-    category: "codm-files",
-    images: ["/logo.png"],
-    features: ["Silent Aim", "Wallhack", "No Recoil", "Rapid Updates"],
-    rating: 4.8,
-    reviewCount: 891,
-    isFeatured: true,
-    isTrending: true,
-    tags: ["codm", "premium"],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "3",
-    slug: "unlock-tool-pro",
-    name: "Unlock Tool Pro",
-    description: "Professional unlock toolkit with lifetime updates.",
-    category: "unlock-tools",
-    images: ["/logo.png"],
-    features: ["Multi-game", "HWID Spoofer", "Lifetime Updates"],
-    rating: 4.7,
-    reviewCount: 215,
-    isFeatured: true,
-    isTrending: false,
-    tags: ["tools"],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "4",
-    slug: "bundle-dominator",
-    name: "Dominator Bundle",
-    description: "VIP + CODM + Tools in one powerful package.",
-    category: "bundles",
-    images: ["/logo.png"],
-    features: ["All VIP features", "CODM Premium", "Unlock Tools", "Priority Queue"],
-    rating: 5.0,
-    reviewCount: 67,
-    isFeatured: true,
-    isTrending: true,
-    tags: ["bundle"],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+function mapApiProduct(p: any): Product {
+  const categorySlug =
+    typeof p.category === "string"
+      ? p.category
+      : p.category?.slug || p.categoryId || "uncategorized";
+  const fileKey = p.fileKey || null;
+  const fileUrl =
+    p.fileUrl ||
+    (fileKey && /^https?:\/\//i.test(fileKey) ? fileKey : null);
+
+  return {
+    id: p.id,
+    slug: p.slug,
+    name: p.name,
+    description: p.description || "",
+    shortDescription: p.shortDescription || undefined,
+    category: categorySlug,
+    images: Array.isArray(p.images) ? p.images : [],
+    features: Array.isArray(p.features) ? p.features : [],
+    rating: typeof p.rating === "number" ? p.rating : 0,
+    reviewCount: typeof p.reviewCount === "number" ? p.reviewCount : 0,
+    isFeatured: Boolean(p.isFeatured),
+    isTrending: Boolean(p.isTrending),
+    tags: Array.isArray(p.tags) ? p.tags : [],
+    fileKey,
+    fileUrl,
+    createdAt: p.createdAt || new Date().toISOString(),
+    updatedAt: p.updatedAt || new Date().toISOString(),
+  };
+}
 
 export function FeaturedProducts() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [keyModalOpen, setKeyModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        // Prefer featured; if none, show latest active products
+        let list: any[] = [];
+        try {
+          const res = await api.get<{ success: boolean; products: any[] }>(
+            "/products/featured"
+          );
+          list = res.products || [];
+        } catch {
+          /* fall through */
+        }
+        if (list.length === 0) {
+          const res = await api.get<{ success: boolean; products: any[] }>(
+            "/products?limit=8&sort=newest"
+          );
+          list = res.products || [];
+        }
+        if (!cancelled) setProducts(list.map(mapApiProduct));
+      } catch {
+        if (!cancelled) setProducts([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleDownload = (product: Product) => {
-    if (product.fileUrl) {
-      window.open(product.fileUrl, "_blank");
+    const url = product.fileUrl || product.fileKey;
+    if (url && /^https?:\/\//i.test(url)) {
+      window.open(url, "_blank");
     } else {
       toast.info("Contact us to receive your download link.");
       setSelectedProduct(product);
@@ -110,68 +110,93 @@ export function FeaturedProducts() {
               <h2 className="font-display text-3xl md:text-4xl font-bold mb-2">
                 Featured <span className="neon-text">Products</span>
               </h2>
-              <p className="text-muted-foreground">Hand-picked premium offerings — all free</p>
+              <p className="text-muted-foreground">
+                Hand-picked premium offerings — all free
+              </p>
             </div>
             <Link href="/products">
               <Button variant="ghost">View All</Button>
             </Link>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {FEATURED.map((product, i) => (
-              <motion.div
-                key={product.id}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.08 }}
-                className="card-glow group flex flex-col"
-              >
-                <Link href={`/products/${product.slug}`} className="block p-4">
-                  <div className="relative aspect-square rounded-xl bg-gradient-to-br from-primary/20 to-accent/10 mb-4 overflow-hidden">
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-4xl font-display font-bold text-primary/40">
-                        {product.name.charAt(0)}
+          {loading && (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          )}
+
+          {!loading && products.length === 0 && (
+            <p className="text-center text-muted-foreground py-12">
+              No products yet — check back soon.
+            </p>
+          )}
+
+          {!loading && products.length > 0 && (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {products.map((product, i) => (
+                <motion.div
+                  key={product.id}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.08 }}
+                  className="card-glow group flex flex-col"
+                >
+                  <Link href={`/products/${product.slug}`} className="block p-4">
+                    <div className="relative aspect-square rounded-xl bg-gradient-to-br from-primary/20 to-accent/10 mb-4 overflow-hidden">
+                      {product.images[0] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={product.images[0]}
+                          alt={product.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-4xl font-display font-bold text-primary/40">
+                            {product.name.charAt(0)}
+                          </span>
+                        </div>
+                      )}
+                      {product.isTrending && (
+                        <span className="absolute top-2 left-2 rounded-lg bg-primary px-2 py-0.5 text-xs font-bold text-white">
+                          HOT
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="font-semibold text-white group-hover:text-primary transition-colors mb-1 line-clamp-1">
+                      {product.name}
+                    </h3>
+                    <div className="flex items-center gap-1 mb-2">
+                      <Star className="h-3.5 w-3.5 fill-primary text-primary" />
+                      <span className="text-xs text-muted-foreground">
+                        {product.rating} ({product.reviewCount})
                       </span>
                     </div>
-                    {product.isTrending && (
-                      <span className="absolute top-2 left-2 rounded-lg bg-primary px-2 py-0.5 text-xs font-bold text-white">
-                        HOT
-                      </span>
-                    )}
+                    <span className="text-xs font-bold text-primary">FREE</span>
+                  </Link>
+                  <div className="p-4 pt-0 mt-auto flex gap-2">
+                    <Button
+                      className="flex-1 gap-1.5"
+                      size="sm"
+                      onClick={() => handleDownload(product)}
+                    >
+                      <Download className="h-3.5 w-3.5" /> Download
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="border border-primary/30 hover:bg-primary/10 px-3"
+                      onClick={() => handleGetKey(product)}
+                      aria-label="Get Key"
+                    >
+                      <Key className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
-                  <h3 className="font-semibold text-white group-hover:text-primary transition-colors mb-1 line-clamp-1">
-                    {product.name}
-                  </h3>
-                  <div className="flex items-center gap-1 mb-2">
-                    <Star className="h-3.5 w-3.5 fill-primary text-primary" />
-                    <span className="text-xs text-muted-foreground">
-                      {product.rating} ({product.reviewCount})
-                    </span>
-                  </div>
-                  <span className="text-xs font-bold text-primary">FREE</span>
-                </Link>
-                <div className="p-4 pt-0 mt-auto flex gap-2">
-                  <Button
-                    className="flex-1 gap-1.5"
-                    size="sm"
-                    onClick={() => handleDownload(product)}
-                  >
-                    <Download className="h-3.5 w-3.5" /> Download
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="border border-primary/30 hover:bg-primary/10 px-3"
-                    onClick={() => handleGetKey(product)}
-                    aria-label="Get Key"
-                  >
-                    <Key className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </>

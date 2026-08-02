@@ -52,7 +52,14 @@ export async function POST(req: NextRequest) {
       .update(`admin:${adminPassword}`)
       .digest("hex");
 
-    const res = NextResponse.json({ success: true, mode: "local" });
+    // Return the token in the body so the client can attach it to
+    // Authorization headers for API/upload requests (httpOnly cookie
+    // alone cannot be read by JS for Bearer auth).
+    const res = NextResponse.json({
+      success: true,
+      mode: "local",
+      token,
+    });
     res.cookies.set("admin_auth", `local:${token}`, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

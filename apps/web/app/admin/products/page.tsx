@@ -94,6 +94,7 @@ function ProductModal({
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(
     initial?.imageUrl || null
   );
@@ -101,21 +102,37 @@ function ProductModal({
   const set = (k: keyof ProductForm, v: string | boolean) =>
     setForm((prev) => ({ ...prev, [k]: v }));
 
+  /** Resolve Authorization value: admin session token preferred, else user JWT */
+  function getUploadAuthHeader(): Record<string, string> {
+    if (typeof window === "undefined") return {};
+    const admin = localStorage.getItem("adminToken");
+    if (admin) return { Authorization: `Bearer admin:${admin}` };
+    const jwt = localStorage.getItem("token");
+    if (jwt) return { Authorization: `Bearer ${jwt}` };
+    return {};
+  }
+
   /** Upload a file from the phone/PC to the API and return the public URL */
   async function uploadFile(file: File): Promise<string> {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const base = api.baseUrl || "/api-proxy";
     const fd = new FormData();
     fd.append("file", file);
+
+    const authHeaders = getUploadAuthHeader();
+    if (!authHeaders.Authorization) {
+      throw new Error(
+        "Not authenticated. Please log in again as admin, then retry the upload."
+      );
+    }
 
     let res: Response;
     try {
       res = await fetch(`${base}/admin/upload`, {
         method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        // Only Authorization — never set Content-Type so the browser
+        // generates the correct multipart boundary for FormData.
+        headers: authHeaders,
         body: fd,
-        // Do NOT set Content-Type — browser sets multipart boundary
       });
     } catch {
       throw new Error(
@@ -124,15 +141,35 @@ function ProductModal({
     }
 
     if (!res.ok) {
-      let msg = `Upload failed (${res.status})`;
+      let backendMsg = "";
       try {
         const j = (await res.json()) as { error?: string; message?: string };
-        if (j.error || j.message) msg = j.error ?? j.message ?? msg;
-      } catch { /* ignore */ }
-      if (res.status === 401 || res.status === 403) {
-        msg = "Session expired or admin access required. Please log in again.";
+        backendMsg = (j.error ?? j.message ?? "").trim();
+      } catch {
+        /* ignore non-JSON */
       }
-      throw new Error(msg);
+
+      if (res.status === 401) {
+        throw new Error(
+          backendMsg ||
+            "Unauthorized (401). Your session may have expired — please log in again."
+        );
+      }
+      if (res.status === 403) {
+        throw new Error(
+          backendMsg ||
+            "Forbidden (403). Admin access is required for uploads."
+        );
+      }
+      if (res.status === 413) {
+        throw new Error(backendMsg || "File too large.");
+      }
+      if (res.status === 400) {
+        throw new Error(backendMsg || "Invalid file or upload request.");
+      }
+      throw new Error(
+        backendMsg || `Upload failed (HTTP ${res.status}).`
+      );
     }
 
     const data = (await res.json()) as { url: string; success?: boolean };
@@ -185,6 +222,7 @@ function ProductModal({
       return;
     }
 
+    setSelectedFileName(file.name);
     setUploadingFile(true);
     try {
       const url = await uploadFile(file);
@@ -198,6 +236,7 @@ function ProductModal({
       } else {
         toast.error(msg);
       }
+      setSelectedFileName(null);
     } finally {
       setUploadingFile(false);
     }
@@ -333,10 +372,10 @@ function ProductModal({
                 onChange={handleFilePick}
               />
             </label>
-            {form.fileUrl && (
+            {(selectedFileName || form.fileUrl) && (
               <p className="mt-1.5 text-[10px] text-muted-foreground truncate flex items-center gap-1">
                 <Check className="h-3 w-3 text-green-400 shrink-0" />
-                {form.fileUrl}
+                {selectedFileName || form.fileUrl}
               </p>
             )}
           </div>

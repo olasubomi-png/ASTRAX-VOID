@@ -30,10 +30,19 @@ function AdminLoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
       });
-      const data = (await res.json()) as { success?: boolean; error?: string };
+      const data = (await res.json()) as {
+        success?: boolean;
+        error?: string;
+        token?: string;
+      };
       if (!res.ok) {
         toast.error(data.error ?? "Invalid password.");
         return;
+      }
+      // Persist admin session token for Authorization headers on
+      // upload + admin API calls (cookie alone is httpOnly).
+      if (data.token && typeof window !== "undefined") {
+        localStorage.setItem("adminToken", data.token);
       }
       toast.success("Admin access granted.");
       router.push(from);

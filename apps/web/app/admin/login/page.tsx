@@ -7,6 +7,7 @@ import { Shield, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { api, setAuthToken } from "@/lib/api";
 
 function AdminLoginForm() {
   const router = useRouter();
@@ -25,6 +26,42 @@ function AdminLoginForm() {
     }
     setLoading(true);
     try {
+      // 1) Prefer API-issued JWT (role ADMIN). Works with all admin/upload routes.
+      //    Uses the same JWT_SECRET as the API — no SESSION_SECRET pairing needed.
+      let jwt: string | null = null;
+      try {
+        const res = await api.post<{
+          success: boolean;
+          token: string;
+          user?: { role?: string };
+        }>("/auth/admin-login", { password });
+        if (res?.token) jwt = res.token;
+      } catch (apiErr) {
+        // Fall through to local cookie gate if API is unreachable
+        console.warn("[admin-login] API admin-login failed, trying local gate", apiErr);
+      }
+
+      if (jwt) {
+        setAuthToken(jwt);
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            "user",
+            JSON.stringify({
+              id: "local-admin",
+              email: "admin@local",
+              username: "admin",
+              role: "ADMIN",
+            })
+          );
+          // Cookie so Next middleware allows /admin pages
+          document.cookie = `admin_auth=${jwt}; path=/; SameSite=Lax; max-age=${60 * 60 * 24 * 7}`;
+        }
+        toast.success("Admin access granted.");
+        router.push(from);
+        return;
+      }
+
+      // 2) Fallback: local Next.js password gate (cookie only — limited API access)
       const res = await fetch("/api/admin-auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -39,8 +76,6 @@ function AdminLoginForm() {
         toast.error(data.error ?? "Invalid password.");
         return;
       }
-      // Persist admin session token for Authorization headers on
-      // upload + admin API calls (cookie alone is httpOnly).
       if (data.token && typeof window !== "undefined") {
         localStorage.setItem("adminToken", data.token);
       }

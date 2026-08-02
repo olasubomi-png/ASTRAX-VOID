@@ -102,13 +102,13 @@ function ProductModal({
   const set = (k: keyof ProductForm, v: string | boolean) =>
     setForm((prev) => ({ ...prev, [k]: v }));
 
-  /** Resolve Authorization value: admin session token preferred, else user JWT */
+  /** Resolve Authorization: JWT (from admin-login) preferred, else legacy adminToken */
   function getUploadAuthHeader(): Record<string, string> {
     if (typeof window === "undefined") return {};
-    const admin = localStorage.getItem("adminToken");
-    if (admin) return { Authorization: `Bearer admin:${admin}` };
     const jwt = localStorage.getItem("token");
     if (jwt) return { Authorization: `Bearer ${jwt}` };
+    const admin = localStorage.getItem("adminToken");
+    if (admin) return { Authorization: `Bearer admin:${admin}` };
     return {};
   }
 

@@ -78,6 +78,54 @@ router.post("/login", async (req, res, next) => {
   }
 });
 
+/**
+ * POST /api/auth/admin-login
+ * Password-gate for the admin panel. Issues a real JWT with role ADMIN
+ * signed with JWT_SECRET so all admin/upload routes work with the same
+ * Bearer auth as the rest of the API. No cross-service HMAC required.
+ */
+router.post("/admin-login", async (req, res, next) => {
+  try {
+    const password =
+      typeof req.body?.password === "string" ? req.body.password : "";
+    const isProd = process.env.NODE_ENV === "production";
+    const adminPassword =
+      process.env.ADMIN_PASSWORD || (!isProd ? "mickyp007" : undefined);
+
+    if (!adminPassword) {
+      throw new AppError(
+        "ADMIN_PASSWORD is not configured on the API server",
+        503
+      );
+    }
+    if (!password || password !== adminPassword) {
+      throw new AppError("Invalid admin password", 401);
+    }
+    if (!process.env.JWT_SECRET) {
+      throw new AppError("JWT_SECRET is not configured on the API server", 503);
+    }
+
+    const token = signToken({
+      id: "local-admin",
+      email: "admin@local",
+      role: "ADMIN",
+    });
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: "local-admin",
+        email: "admin@local",
+        username: "admin",
+        role: "ADMIN",
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/me", requireAuth, async (req: AuthRequest, res, next) => {
   try {
     const user = await prisma.user.findUnique({

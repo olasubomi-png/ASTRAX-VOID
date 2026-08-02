@@ -35,17 +35,15 @@ const API_BASE = resolveApiBase();
 // ─── Auth helpers (browser-only) ──────────────────────────────────────────
 
 /**
- * Prefer the local admin session token (password gate) when present so
- * admin UI uploads/CRUD always use an ADMIN-capable credential. Fall
- * back to the standard user JWT. Admin tokens are sent as
- * `Bearer admin:<hex>` so the API can distinguish them from JWTs.
+ * Prefer the standard JWT (including admin-login JWT with role ADMIN).
+ * Fall back to the legacy HMAC admin session token as `Bearer admin:<hex>`.
  */
 function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
-  const admin = localStorage.getItem("adminToken");
-  if (admin) return `admin:${admin}`;
   const jwt = localStorage.getItem("token");
   if (jwt) return jwt;
+  const admin = localStorage.getItem("adminToken");
+  if (admin) return `admin:${admin}`;
   return null;
 }
 

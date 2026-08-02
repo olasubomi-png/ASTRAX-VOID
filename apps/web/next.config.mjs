@@ -23,10 +23,18 @@ const nextConfig = {
   async rewrites() {
     const apiInternalUrl =
       process.env.API_INTERNAL_URL || "http://localhost:4000";
+    const publicApi =
+      process.env.PUBLIC_API_URL ||
+      process.env.API_INTERNAL_URL ||
+      "http://localhost:4000";
     return [
       {
         source: "/api-proxy/:path*",
         destination: `${apiInternalUrl}/api/:path*`,
+      },
+      {
+        source: "/uploads/:path*",
+        destination: `${publicApi.replace(/\/$/, "")}/uploads/:path*`,
       },
     ];
   },

@@ -16,6 +16,7 @@ import { GetKeyModal } from "@/components/ui/GetKeyModal";
 import { api } from "@/lib/api";
 import type { Product } from "@/types";
 import { toast } from "sonner";
+import { mediaUrl, triggerDownload } from "@/lib/utils";
 
 function mapApiProduct(p: any): Product {
   const categorySlug =
@@ -23,9 +24,7 @@ function mapApiProduct(p: any): Product {
       ? p.category
       : p.category?.slug || p.categoryId || "uncategorized";
   const fileKey = p.fileKey || null;
-  const fileUrl =
-    p.fileUrl ||
-    (fileKey && /^https?:\/\//i.test(fileKey) ? fileKey : null);
+  const fileUrl = mediaUrl(p.fileUrl) || mediaUrl(fileKey) || null;
 
   return {
     id: p.id,
@@ -37,7 +36,7 @@ function mapApiProduct(p: any): Product {
     salePrice: p.salePrice,
     currency: p.currency,
     category: categorySlug,
-    images: Array.isArray(p.images) ? p.images : [],
+    images: Array.isArray(p.images) ? p.images.map((img: string) => mediaUrl(img) || img).filter(Boolean) : [],
     features: Array.isArray(p.features) ? p.features : [],
     requirements: Array.isArray(p.requirements) ? p.requirements : [],
     rating: typeof p.rating === "number" ? p.rating : 0,
@@ -88,11 +87,11 @@ export default function ProductDetailPage({
 
   const handleDownload = () => {
     if (!product) return;
-    const url = product.fileUrl || product.fileKey;
-    if (url && /^https?:\/\//i.test(url)) {
-      window.open(url, "_blank");
+    const url = mediaUrl(product.fileUrl) || mediaUrl(product.fileKey);
+    if (url) {
+      triggerDownload(url, product.slug ? `${product.slug}.zip` : "download.zip");
     } else {
-      toast.info("Contact us to receive your download link.");
+      toast.info("No file attached. Contact us for your download link.");
       setKeyModalOpen(true);
     }
   };

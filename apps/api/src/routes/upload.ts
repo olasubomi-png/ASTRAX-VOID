@@ -86,12 +86,16 @@ router.post(
         .json({ success: false, error: "No file uploaded. Use field name 'file'." });
     }
 
+    // Relative path works on HTTPS frontends via Vercel/nginx rewrite to this host.
+    const relative = `/uploads/${req.file.filename}`;
     const base = publicBase(req);
-    const url = `${base}/uploads/${req.file.filename}`;
+    const absolute = `${base}${relative}`;
 
     res.status(201).json({
       success: true,
-      url,
+      // Prefer relative so https:// Vercel is not blocked by mixed content (http images)
+      url: relative,
+      absoluteUrl: absolute,
       key: req.file.filename,
       originalName: req.file.originalname,
       size: req.file.size,

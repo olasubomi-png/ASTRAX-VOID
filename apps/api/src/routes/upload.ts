@@ -25,8 +25,8 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: {
-    // 50 MB — enough for images and most config/zip packs
-    fileSize: 50 * 1024 * 1024,
+    // 60 GB — large digital packs / archives for admin product uploads
+    fileSize: 60 * 1024 * 1024 * 1024,
   },
   fileFilter: (_req, file, cb) => {
     // Allow images and common archive/config types
@@ -71,7 +71,7 @@ router.post(
         if (isMulter === "LIMIT_FILE_SIZE") {
           return res.status(413).json({
             success: false,
-            error: "File too large. Maximum size is 50 MB.",
+            error: "File too large. Maximum size is 60 GB.",
           });
         }
         return res.status(400).json({ success: false, error: msg });

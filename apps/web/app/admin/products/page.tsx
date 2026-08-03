@@ -223,9 +223,9 @@ function ProductModal({
     e.target.value = "";
     if (!file) return;
 
-    // Max 50 MB for download packs
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error("File is too large. Maximum size is 50 MB.");
+    // Max 60 GB for download packs
+    if (file.size > 60 * 1024 * 1024 * 1024) {
+      toast.error("File is too large. Maximum size is 60 GB.");
       return;
     }
 

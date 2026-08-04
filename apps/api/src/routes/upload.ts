@@ -27,15 +27,14 @@ const upload = multer({
   limits: {
     // 60 GB — large digital packs / archives for admin product uploads
     fileSize: 60 * 1024 * 1024 * 1024,
+    // Raise field size limit so large metadata fields don't get rejected
+    fieldSize: 10 * 1024 * 1024, // 10 MB per non-file field
   },
-  fileFilter: (_req, file, cb) => {
-    // Allow images and common archive/config types
-    const allowed = /\.(jpe?g|png|gif|webp|svg|zip|rar|7z|pdf|txt|json|cfg|ini|xml)$/i;
-    if (allowed.test(path.extname(file.originalname)) || file.mimetype.startsWith("image/")) {
-      cb(null, true);
-    } else {
-      cb(new Error("File type not allowed. Use images or common archive/config files."));
-    }
+  fileFilter: (_req, _file, cb) => {
+    // Admin upload: allow ALL file types (game packs, APKs, OBBs, ZIPs,
+    // images, configs, PDFs, etc.).  The 60 GB size limit above is the only
+    // restriction needed here.
+    cb(null, true);
   },
 });
 

@@ -8,6 +8,12 @@ const nextConfig = {
   },
   experimental: {
     optimizePackageImports: ["lucide-react", "framer-motion"],
+    // Allow large file uploads (up to 65 GB) through the Next.js proxy rewrite.
+    // When middleware returns NextResponse.next() for /api-proxy/* requests,
+    // Next.js clones/buffers the request body before forwarding it to the
+    // rewrite destination. Without this, the default cap returns HTTP 413
+    // before the request ever reaches Express/multer.
+    middlewareClientMaxBodySize: "65gb",
   },
 
   // ── API proxy ──────────────────────────────────────────────────────────────

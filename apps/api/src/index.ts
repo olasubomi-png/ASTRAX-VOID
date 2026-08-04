@@ -142,11 +142,41 @@ const authLimiter = rateLimit({
 });
 
 // Body parsing
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
+// JSON limit raised to 50 MB for large admin payloads.
+// Note: multipart file uploads are handled by multer (up to 60 GB) and
+// bypass these parsers entirely — they only apply to JSON / urlencoded bodies.
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// Serve uploaded product images / files publicly
-app.use("/uploads", express.static(UPLOAD_DIR));
+// Serve uploaded files.
+// Security: all non-image files are forced to download as attachments so an
+// uploaded HTML or script file cannot execute in the browser on this origin.
+// Images are served inline (needed for product thumbnails), but with a
+// restrictive Content-Security-Policy so inline scripts inside SVGs are blocked.
+app.use(
+  "/uploads",
+  (req, res, next) => {
+    const ext = req.path.split(".").pop()?.toLowerCase() ?? "";
+    const isImage = /^(jpe?g|png|gif|webp)$/.test(ext);
+    const isSvg  = ext === "svg";
+
+    if (isSvg) {
+      // SVG can carry inline scripts — serve as attachment
+      res.setHeader("Content-Disposition", "attachment");
+      res.setHeader("Content-Security-Policy", "default-src 'none'");
+    } else if (isImage) {
+      // Safe raster images — allow inline display
+      res.setHeader("Content-Security-Policy", "default-src 'none'");
+    } else {
+      // Everything else (HTML, JS, ZIP, APK, …) — force download
+      const filename = req.path.split("/").pop() ?? "download";
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    }
+
+    next();
+  },
+  express.static(UPLOAD_DIR),
+);
 
 // Health — always responds, even if DB is degraded
 app.get("/health", (_req, res) => {
@@ -193,7 +223,7 @@ async function start() {
     console.warn("⚠️  DATABASE_URL not set — DB routes will return 503.");
   }
 
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log("");
     console.log("══════════════════════════════════════════════");
     console.log("  ASTRAX-VOID API — Startup Report");
@@ -208,6 +238,28 @@ async function start() {
     console.log(`🚀 API listening on http://0.0.0.0:${PORT}`);
     console.log("");
   });
+
+  // Server-side timeouts.
+  //
+  // server.requestTimeout: time allowed to receive the full HTTP request body
+  // from the client.  Node.js default is 300 000 ms (5 min), which would abort
+  // any 60 GB upload that takes longer than 5 minutes.
+  //
+  // We raise it to a single finite ceiling (48 h) that covers the worst-case
+  // transfer time for a 60 GB file over a slow link (~2–3 Mbps ≈ 45 h) while
+  // still being bounded.  This is safe because:
+  //   • All non-upload endpoints have an Express body-size cap (50 MB) that
+  //     causes the connection to close well before the deadline is reached on
+  //     any realistic link speed.
+  //   • The upload endpoint requires admin authentication; unauthenticated
+  //     requests are rejected by requireAuth before multer reads the body.
+  //   • The rate limiter (3 000 req / 15 min per IP) prevents connection
+  //     exhaustion from any single client.
+  //
+  // server.timeout: socket inactivity timeout.  Node 18+ default is already 0
+  // (no inactivity timeout); we leave it unset.
+  server.requestTimeout = 48 * 60 * 60 * 1000; // 48 h finite ceiling
+  server.keepAliveTimeout = 120_000; // 2 min keep-alive after response
 }
 
 // Graceful shutdown

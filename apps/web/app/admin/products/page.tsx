@@ -119,9 +119,45 @@ function ProductModal({
     return {};
   }
 
+  /**
+   * Resolve the base URL to use for file uploads.
+   *
+   * Large files (up to 60 GB) MUST bypass the Next.js / Vercel proxy:
+   *   - Vercel rewrites cap request bodies at Vercel's own ingress limit.
+   *   - Next.js dev-server rewrites are handled by middlewareClientMaxBodySize
+   *     (set to 65 gb in next.config.mjs) — dev uploads can still use /api-proxy.
+   *
+   * In production: set NEXT_PUBLIC_UPLOAD_URL to the direct HTTPS API origin
+   * (e.g. https://api.yourdomain.com/api) so uploads skip the Vercel proxy
+   * entirely and land straight on the Express server.
+   *
+   * In Replit dev: leave NEXT_PUBLIC_UPLOAD_URL unset; uploads fall through to
+   * /api-proxy which is served by the Next.js dev-server rewrite — fine for dev.
+   */
+  function resolveUploadBase(): string {
+    const raw = (process.env.NEXT_PUBLIC_UPLOAD_URL ?? "").replace(/\/$/, "");
+    if (raw) {
+      // Never send from https:// to http:// — mixed-content block in all browsers.
+      if (
+        typeof window !== "undefined" &&
+        window.location.protocol === "https:" &&
+        raw.startsWith("http://")
+      ) {
+        console.warn(
+          "[ASTRAX-VOID] NEXT_PUBLIC_UPLOAD_URL is http:// on an https:// page — " +
+            "falling back to /api-proxy. Set it to an https:// URL for large uploads to work."
+        );
+        return api.baseUrl || "/api-proxy";
+      }
+      return raw;
+    }
+    // Dev fallback: /api-proxy handled by Next.js dev-server (middlewareClientMaxBodySize = 65gb)
+    return api.baseUrl || "/api-proxy";
+  }
+
   /** Upload a file from the phone/PC to the API and return the public URL */
   async function uploadFile(file: File): Promise<string> {
-    const base = api.baseUrl || "/api-proxy";
+    const base = resolveUploadBase();
     const fd = new FormData();
     fd.append("file", file);
 

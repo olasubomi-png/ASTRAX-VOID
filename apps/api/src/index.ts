@@ -2,31 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import dotenv from "dotenv";
-
-// Load .env before importing any module that reads process.env
-dotenv.config();
-
-// ── Startup validation ────────────────────────────────────────────────────────
-// In production: hard-exit on missing vars so PM2/Docker restarts with a clear
-// error message rather than a cryptic Prisma crash.
-// In development: warn and continue — routes that need DB will return 503.
-const IS_PROD = process.env.NODE_ENV === "production";
-const REQUIRED_ENV = ["DATABASE_URL", "JWT_SECRET", "CORS_ORIGIN"] as const;
-const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
-if (missing.length > 0) {
-  if (IS_PROD) {
-    console.error("\n❌ ASTRAX-VOID API cannot start — missing required environment variables:");
-    missing.forEach((key) => console.error(`   • ${key}`));
-    console.error("\n📋 Fix: set the listed variables in your deployment environment.\n");
-    process.exit(1);
-  } else {
-    console.warn("\n⚠️  Missing env vars (dev mode — affected routes will return 503):");
-    missing.forEach((key) => console.warn(`   • ${key}`));
-    console.warn("📋 Fix: update apps/api/.env with real values.\n");
-  }
-}
-// ─────────────────────────────────────────────────────────────────────────────
+import "./config/env.js";
 
 import { prisma } from "./lib/prisma.js";
 import { authRoutes } from "./routes/auth.js";
@@ -188,6 +164,23 @@ app.get("/health", (_req, res) => {
   });
 });
 
+app.get("/health/db", async (_req, res) => {
+  try {
+    await prisma.$runCommandRaw({ ping: 1 });
+    res.json({
+      status: "ok",
+      database: "connected",
+    });
+  } catch {
+    console.error("✗ Database health check failed: MongoDB unavailable");
+    res.status(503).json({
+      status: "error",
+      database: "unavailable",
+      error: "Database unavailable",
+    });
+  }
+});
+
 // Routes
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/products", productRoutes);
@@ -205,22 +198,18 @@ app.use(errorHandler);
 
 // ── Start server after confirming database is reachable ───────────────────────
 async function start() {
-  if (process.env.DATABASE_URL) {
-    try {
-      await prisma.$connect();
-      console.log("✅ Database connected");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("❌ Database connection failed:", msg);
-      if (IS_PROD) {
-        console.error("   Check DATABASE_URL in your deployment environment.");
-        process.exit(1);
-      } else {
-        console.warn("⚠️  Running without DB — admin/order/user routes will return 503.");
-      }
-    }
-  } else {
-    console.warn("⚠️  DATABASE_URL not set — DB routes will return 503.");
+  try {
+    await prisma.$connect();
+    console.log("✓ Database connected");
+  } catch {
+    console.error("✗ Database connection failed");
+    console.error(
+      "  MongoDB Atlas may be blocking this server. Add the EC2 public IP to Atlas → Network Access, or temporarily allow 0.0.0.0/0 for testing.",
+    );
+    console.error(
+      "  Also verify the mongodb+srv:// connection string, credentials, and Atlas replica set availability.",
+    );
+    process.exit(1);
   }
 
   const server = app.listen(PORT, () => {
@@ -230,7 +219,7 @@ async function start() {
     console.log("══════════════════════════════════════════════");
     console.log(`  Environment     : ${process.env.NODE_ENV || "development"}`);
     console.log(`  Port            : ${PORT}`);
-    console.log(`  DATABASE_URL    : ${process.env.DATABASE_URL ? "✓ Loaded" : "✗ MISSING"}`);
+    console.log(`  DATABASE_URL    : ✓ Loaded`);
     console.log(`  JWT_SECRET      : ${process.env.JWT_SECRET ? "✓ Loaded" : "✗ MISSING"}`);
     console.log(`  CORS_ORIGIN     : ${process.env.CORS_ORIGIN ? "✓ Loaded" : "✗ MISSING"}`);
     console.log(`  Allowed origins : ${allowedOrigins.join(", ") || "(none)"}`);

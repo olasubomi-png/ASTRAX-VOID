@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { databaseFailureSummary, isDatabaseUnavailable } from "../lib/prisma.js";
 
 export function errorHandler(
   err: any,
@@ -6,13 +7,22 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ) {
-  console.error("[API Error]", err);
+  if (isDatabaseUnavailable(err)) {
+    console.error(`✗ Database unavailable: ${databaseFailureSummary(err)}`);
+    res.status(503).json({
+      success: false,
+      error: "Database unavailable",
+    });
+    return;
+  }
 
   const status = err.status || err.statusCode || 500;
   const message = err.message || "Internal server error";
 
+  console.error(`[API Error] ${message}`);
+
   // Never expose stack traces in HTTP responses — they reveal implementation
-  // details and internal paths. Stack is already printed to console above.
+  // details and internal paths.
   res.status(status).json({
     success: false,
     error: message,

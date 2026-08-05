@@ -2,12 +2,23 @@ import { Router } from "express";
 import { requireAuth, requireAdmin, AuthRequest } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { prisma } from "../lib/prisma.js";
+import { databaseFailureSummary, isDatabaseUnavailable } from "../lib/prisma.js";
 import { logActivity } from "../lib/activity.js";
 import fs from "fs";
 import path from "path";
 const router = Router();
 
 router.use(requireAuth, requireAdmin);
+
+function valueOr<T>(
+  result: PromiseSettledResult<T>,
+  fallback: T,
+  label: string,
+): T {
+  if (result.status === "fulfilled") return result.value;
+  console.warn(`[admin/stats] ${label} unavailable: ${databaseFailureSummary(result.reason)}`);
+  return fallback;
+}
 
 // ── Dashboard stats (live DB only — no demo data) ───────────────────────────
 router.get("/stats", async (_req, res, next) => {
@@ -20,22 +31,7 @@ router.get("/stats", async (_req, res, next) => {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    const [
-      products,
-      productsActive,
-      users,
-      admins,
-      categories,
-      downloads,
-      downloadsToday,
-      downloadsWeek,
-      downloadsMonth,
-      androidProducts,
-      iosProducts,
-      latestUser,
-      latestProduct,
-      recentActivity,
-    ] = await Promise.all([
+    const initialResults = await Promise.allSettled([
       prisma.product.count(),
       prisma.product.count({ where: { isActive: true } }),
       prisma.user.count(),
@@ -72,12 +68,57 @@ router.get("/stats", async (_req, res, next) => {
       }),
     ]);
 
+    if (initialResults.every((result) => result.status === "rejected")) {
+      const firstFailure = initialResults.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      if (firstFailure && isDatabaseUnavailable(firstFailure.reason)) {
+        res.status(503).json({ success: false, error: "Database unavailable" });
+        return;
+      }
+    }
+
+    const [
+      products,
+      productsActive,
+      users,
+      admins,
+      categories,
+      downloads,
+      downloadsToday,
+      downloadsWeek,
+      downloadsMonth,
+      androidProducts,
+      iosProducts,
+      latestUser,
+      latestProduct,
+      recentActivity,
+    ] = [
+      valueOr(initialResults[0], 0, "products"),
+      valueOr(initialResults[1], 0, "active products"),
+      valueOr(initialResults[2], 0, "users"),
+      valueOr(initialResults[3], 0, "admins"),
+      valueOr(initialResults[4], 0, "categories"),
+      valueOr(initialResults[5], 0, "downloads"),
+      valueOr(initialResults[6], 0, "downloads today"),
+      valueOr(initialResults[7], 0, "downloads this week"),
+      valueOr(initialResults[8], 0, "downloads this month"),
+      valueOr(initialResults[9], 0, "Android products"),
+      valueOr(initialResults[10], 0, "iOS products"),
+      valueOr(initialResults[11], null, "latest user"),
+      valueOr(initialResults[12], null, "latest product"),
+      valueOr(initialResults[13], [], "recent activity"),
+    ];
+
     // Distinct games that have at least one product
-    const gameGroups = await prisma.product.groupBy({
-      by: ["gameSlug"],
-      where: { gameSlug: { not: null } },
-      _count: true,
-    });
+    const [gameGroupsResult] = await Promise.allSettled([
+      prisma.product.groupBy({
+        by: ["gameSlug"],
+        where: { gameSlug: { not: null } },
+        _count: true,
+      }),
+    ]);
+    const gameGroups = valueOr(gameGroupsResult, [], "game groups");
     const games = gameGroups.filter((g) => g.gameSlug).length;
 
     // Storage from uploads directory
@@ -110,13 +151,16 @@ router.get("/stats", async (_req, res, next) => {
     }
 
     // Most downloaded product (by productName in logs)
-    const topDownloads = await prisma.downloadLog.groupBy({
-      by: ["productName"],
-      where: { productName: { not: null } },
-      _count: { productName: true },
-      orderBy: { _count: { productName: "desc" } },
-      take: 1,
-    });
+    const [topDownloadsResult] = await Promise.allSettled([
+      prisma.downloadLog.groupBy({
+        by: ["productName"],
+        where: { productName: { not: null } },
+        _count: { productName: true },
+        orderBy: { _count: { productName: "desc" } },
+        take: 1,
+      }),
+    ]);
+    const topDownloads = valueOr(topDownloadsResult, [], "top downloads");
     const mostDownloaded = topDownloads[0]
       ? {
           name: topDownloads[0].productName,
@@ -126,26 +170,34 @@ router.get("/stats", async (_req, res, next) => {
 
     // Downloads per day (last 7 days)
     const downloadsPerDay: { date: string; count: number }[] = [];
-    for (let i = 6; i >= 0; i--) {
+    const downloadDays = Array.from({ length: 7 }, (_, index) => {
       const d = new Date();
       d.setHours(0, 0, 0, 0);
-      d.setDate(d.getDate() - i);
+      d.setDate(d.getDate() - (6 - index));
       const next = new Date(d);
       next.setDate(next.getDate() + 1);
-      const count = await prisma.downloadLog.count({
-        where: { createdAt: { gte: d, lt: next } },
-      });
+      return { d, next };
+    });
+    const downloadDayResults = await Promise.allSettled(
+      downloadDays.map(({ d, next }) =>
+        prisma.downloadLog.count({ where: { createdAt: { gte: d, lt: next } } }),
+      ),
+    );
+    downloadDays.forEach(({ d }, index) => {
+      const count = valueOr(downloadDayResults[index], 0, `downloads for ${d.toISOString().slice(0, 10)}`);
       downloadsPerDay.push({
         date: d.toISOString().slice(0, 10),
         count,
       });
-    }
+    });
 
     // New users today / week
-    const [usersToday, usersWeek] = await Promise.all([
+    const [usersTodayResult, usersWeekResult] = await Promise.allSettled([
       prisma.user.count({ where: { createdAt: { gte: startOfDay } } }),
       prisma.user.count({ where: { createdAt: { gte: startOfWeek } } }),
     ]);
+    const usersToday = valueOr(usersTodayResult, 0, "users today");
+    const usersWeek = valueOr(usersWeekResult, 0, "users this week");
 
     res.json({
       success: true,

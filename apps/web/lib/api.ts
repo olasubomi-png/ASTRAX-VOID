@@ -2,28 +2,33 @@
  * ASTRAX-VOID API client
  *
  * All API requests must go through this module — never use raw URLs.
- * NEXT_PUBLIC_API_URL is set per environment:
- *   - Replit dev : /api-proxy  (rewritten by next.config.mjs → localhost:4000/api)
- *   - Vercel prod: /api-proxy  (rewritten by vercel.json → http://34.201.64.198/api)
- */
-
-/**
- * Prefer relative /api-proxy so the browser always hits the same origin.
- * Next.js (dev) and Vercel (prod) rewrite /api-proxy/* → Express /api/*.
- * Absolute http:// URLs from an https:// site cause mixed-content blocks
- * and "Failed to fetch". Only use an absolute URL when it is https://.
+ *
+ * NEXT_PUBLIC_API_URL controls the base path baked into the client bundle:
+ *
+ *   Replit / local dev  →  unset  →  falls back to "/api-proxy"
+ *     next.config.mjs rewrites /api-proxy/* → http://localhost:4000/api/*
+ *
+ *   EC2 + Nginx (production)  →  NEXT_PUBLIC_API_URL=/api
+ *     Nginx routes /api/* → Express on :4000 (same origin, no CORS needed)
+ *
+ *   Vercel (production)  →  NEXT_PUBLIC_API_URL=/api-proxy
+ *     vercel.json rewrites /api-proxy/* → Express API origin
+ *
+ * See apps/web/.env.example for full documentation.
  */
 function resolveApiBase(): string {
   const raw = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
   if (!raw) return "/api-proxy";
-  // Block accidental mixed content: http API from https page
+  // Block accidental mixed content: http:// API from an https:// page.
   if (
     typeof window !== "undefined" &&
     window.location.protocol === "https:" &&
     raw.startsWith("http://")
   ) {
     console.warn(
-      "[ASTRAX-VOID] NEXT_PUBLIC_API_URL is http:// on an https:// page — using /api-proxy to avoid mixed content."
+      "[ASTRAX-VOID] NEXT_PUBLIC_API_URL is http:// on an https:// page — " +
+        "using /api-proxy to avoid mixed content. " +
+        "Set NEXT_PUBLIC_API_URL to an https:// URL or a relative path."
     );
     return "/api-proxy";
   }

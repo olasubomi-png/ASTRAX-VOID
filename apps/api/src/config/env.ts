@@ -24,19 +24,38 @@ if (envResult.error) {
   console.log("[config] loaded environment from apps/api/.env");
 }
 
+const isMongoConnectionString = (value: string | undefined): boolean =>
+  Boolean(
+    value &&
+      (value.startsWith("mongodb://") || value.startsWith("mongodb+srv://")),
+  );
 const isProduction = process.env.NODE_ENV === "production";
-const requiredEnvironment = ["DATABASE_URL", "JWT_SECRET", "CORS_ORIGIN"] as const;
-const missingEnvironment = requiredEnvironment.filter((key) => !process.env[key]);
 
-if (!process.env.DATABASE_URL) {
+/**
+ * DATABASE_URL is reserved by Replit and may be populated with a non-Mongo
+ * runtime value. Prefer the explicitly configured Atlas secret when present,
+ * while retaining DATABASE_URL support for EC2/PM2 deployments.
+ */
+const databaseUrl = isMongoConnectionString(process.env.ATLAS_DATABASE_URL)
+  ? process.env.ATLAS_DATABASE_URL
+  : isMongoConnectionString(process.env.DATABASE_URL)
+    ? process.env.DATABASE_URL
+    : undefined;
+
+if (!databaseUrl) {
   console.error(
-    "✗ DATABASE_URL is missing. Set it in apps/api/.env or in the PM2 environment before starting the API.",
+    "✗ MongoDB connection string is missing. Set ATLAS_DATABASE_URL securely on Replit, or DATABASE_URL in apps/api/.env on EC2/PM2.",
   );
   process.exit(1);
 }
 
-if (missingEnvironment.some((key) => key !== "DATABASE_URL")) {
-  const missing = missingEnvironment.filter((key) => key !== "DATABASE_URL");
+process.env.DATABASE_URL = databaseUrl;
+
+const requiredEnvironment = ["JWT_SECRET", "CORS_ORIGIN"] as const;
+const missingEnvironment = requiredEnvironment.filter((key) => !process.env[key]);
+
+if (missingEnvironment.length > 0) {
+  const missing = missingEnvironment;
   const message = `Missing environment variables: ${missing.join(", ")}`;
 
   if (isProduction) {
@@ -47,17 +66,6 @@ if (missingEnvironment.some((key) => key !== "DATABASE_URL")) {
   console.warn(`⚠ ${message} (development mode)`);
 }
 
-const databaseUrl = process.env.DATABASE_URL;
-if (
-  !databaseUrl.startsWith("mongodb://") &&
-  !databaseUrl.startsWith("mongodb+srv://")
-) {
-  console.error(
-    "✗ DATABASE_URL must be a MongoDB connection string beginning with mongodb:// or mongodb+srv://.",
-  );
-  process.exit(1);
-}
-
 console.log(
-  `[config] DATABASE_URL loaded (${databaseUrl.startsWith("mongodb+srv://") ? "MongoDB Atlas SRV" : "MongoDB"} connection string)`,
+  `[config] ${process.env.ATLAS_DATABASE_URL === databaseUrl ? "ATLAS_DATABASE_URL" : "DATABASE_URL"} loaded (${databaseUrl.startsWith("mongodb+srv://") ? "MongoDB Atlas SRV" : "MongoDB"} connection string)`,
 );

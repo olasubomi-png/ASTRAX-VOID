@@ -9,11 +9,11 @@
   "rewrites": [
     {
       "source": "/api-proxy/:path*",
-      "destination": "http://34.201.64.198/api/:path*"
+      "destination": "http://54.167.96.219/api/:path*"
     },
     {
       "source": "/uploads/:path*",
-      "destination": "http://34.201.64.198/uploads/:path*"
+      "destination": "http://54.167.96.219/uploads/:path*"
     }
   ],
   "env": {

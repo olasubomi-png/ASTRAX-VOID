@@ -22,6 +22,8 @@ function valueOr<T>(
 
 // ── Dashboard stats (live DB only — no demo data) ───────────────────────────
 router.get("/stats", async (_req, res, next) => {
+  const statsStart = Date.now();
+  console.log("[admin/stats] request received — starting DB queries");
   try {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -31,6 +33,25 @@ router.get("/stats", async (_req, res, next) => {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
+    // Batch 1: 14 queries in parallel. allSettled ensures a single failing
+    // query never crashes the endpoint — valueOr() substitutes safe defaults.
+    console.log("[admin/stats] batch 1 — firing 14 queries");
+    const BATCH1_LABELS = [
+      "product.count(all)",
+      "product.count(active)",
+      "user.count(all)",
+      "user.count(admin)",
+      "category.count(all)",
+      "downloadLog.count(all)",
+      "downloadLog.count(today)",
+      "downloadLog.count(week)",
+      "downloadLog.count(month)",
+      "product.count(android)",
+      "product.count(ios)",
+      "user.findFirst(latest)",
+      "product.findFirst(latest)",
+      "activityLog.findMany(recent)",
+    ];
     const initialResults = await Promise.allSettled([
       prisma.product.count(),
       prisma.product.count({ where: { isActive: true } }),
@@ -68,11 +89,26 @@ router.get("/stats", async (_req, res, next) => {
       }),
     ]);
 
+    const batch1Ok = initialResults.filter((r) => r.status === "fulfilled").length;
+    const batch1Fail = initialResults.length - batch1Ok;
+    console.log(
+      `[admin/stats] batch 1 done — ${batch1Ok}/${initialResults.length} ok, ` +
+        `${batch1Fail} failed (${Date.now() - statsStart}ms elapsed)`,
+    );
+    initialResults.forEach((r, i) => {
+      if (r.status === "rejected") {
+        console.error(
+          `[admin/stats] batch 1[${i}] ${BATCH1_LABELS[i]} failed: ${databaseFailureSummary(r.reason)}`,
+        );
+      }
+    });
+
     if (initialResults.every((result) => result.status === "rejected")) {
       const firstFailure = initialResults.find(
         (result): result is PromiseRejectedResult => result.status === "rejected",
       );
       if (firstFailure && isDatabaseUnavailable(firstFailure.reason)) {
+        console.error("[admin/stats] all batch 1 queries failed — returning 503");
         res.status(503).json({ success: false, error: "Database unavailable" });
         return;
       }
@@ -110,7 +146,8 @@ router.get("/stats", async (_req, res, next) => {
       valueOr(initialResults[13], [], "recent activity"),
     ];
 
-    // Distinct games that have at least one product
+    // Batch 2: game groups
+    console.log("[admin/stats] batch 2 — product.groupBy(gameSlug)");
     const [gameGroupsResult] = await Promise.allSettled([
       prisma.product.groupBy({
         by: ["gameSlug"],
@@ -118,6 +155,11 @@ router.get("/stats", async (_req, res, next) => {
         _count: true,
       }),
     ]);
+    if (gameGroupsResult.status === "rejected") {
+      console.error(
+        `[admin/stats] batch 2 product.groupBy failed: ${databaseFailureSummary(gameGroupsResult.reason)}`,
+      );
+    }
     const gameGroups = valueOr(gameGroupsResult, [], "game groups");
     const games = gameGroups.filter((g) => g.gameSlug).length;
 
@@ -150,7 +192,8 @@ router.get("/stats", async (_req, res, next) => {
       /* ignore storage errors */
     }
 
-    // Most downloaded product (by productName in logs)
+    // Batch 3: top downloaded product
+    console.log("[admin/stats] batch 3 — downloadLog.groupBy(productName)");
     const [topDownloadsResult] = await Promise.allSettled([
       prisma.downloadLog.groupBy({
         by: ["productName"],
@@ -160,6 +203,11 @@ router.get("/stats", async (_req, res, next) => {
         take: 1,
       }),
     ]);
+    if (topDownloadsResult.status === "rejected") {
+      console.error(
+        `[admin/stats] batch 3 downloadLog.groupBy failed: ${databaseFailureSummary(topDownloadsResult.reason)}`,
+      );
+    }
     const topDownloads = valueOr(topDownloadsResult, [], "top downloads");
     const mostDownloaded = topDownloads[0]
       ? {
@@ -168,7 +216,8 @@ router.get("/stats", async (_req, res, next) => {
         }
       : null;
 
-    // Downloads per day (last 7 days)
+    // Batch 4: downloads per day (last 7 days — 7 queries in parallel)
+    console.log("[admin/stats] batch 4 — 7× downloadLog.count(per-day)");
     const downloadsPerDay: { date: string; count: number }[] = [];
     const downloadDays = Array.from({ length: 7 }, (_, index) => {
       const d = new Date();
@@ -184,21 +233,36 @@ router.get("/stats", async (_req, res, next) => {
       ),
     );
     downloadDays.forEach(({ d }, index) => {
-      const count = valueOr(downloadDayResults[index], 0, `downloads for ${d.toISOString().slice(0, 10)}`);
-      downloadsPerDay.push({
-        date: d.toISOString().slice(0, 10),
-        count,
-      });
+      const count = valueOr(
+        downloadDayResults[index],
+        0,
+        `downloads for ${d.toISOString().slice(0, 10)}`,
+      );
+      downloadsPerDay.push({ date: d.toISOString().slice(0, 10), count });
     });
 
-    // New users today / week
+    // Batch 5: new users today / this week
+    console.log("[admin/stats] batch 5 — 2× user.count(time-range)");
     const [usersTodayResult, usersWeekResult] = await Promise.allSettled([
       prisma.user.count({ where: { createdAt: { gte: startOfDay } } }),
       prisma.user.count({ where: { createdAt: { gte: startOfWeek } } }),
     ]);
+    if (usersTodayResult.status === "rejected") {
+      console.error(
+        `[admin/stats] batch 5 user.count(today) failed: ${databaseFailureSummary(usersTodayResult.reason)}`,
+      );
+    }
+    if (usersWeekResult.status === "rejected") {
+      console.error(
+        `[admin/stats] batch 5 user.count(week) failed: ${databaseFailureSummary(usersWeekResult.reason)}`,
+      );
+    }
     const usersToday = valueOr(usersTodayResult, 0, "users today");
     const usersWeek = valueOr(usersWeekResult, 0, "users this week");
 
+    console.log(
+      `[admin/stats] all batches complete — responding (${Date.now() - statsStart}ms total)`,
+    );
     res.json({
       success: true,
       stats: {
@@ -229,6 +293,7 @@ router.get("/stats", async (_req, res, next) => {
       },
     });
   } catch (err) {
+    console.error(`[admin/stats] unhandled exception after ${Date.now() - statsStart}ms:`, err);
     next(err);
   }
 });

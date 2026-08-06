@@ -5,7 +5,15 @@ import { PrismaClient } from "@prisma/client";
  * The base instance is stored on globalThis so it survives module
  * re-evaluation (e.g. ts-node-dev / tsx --watch hot reloads).
  * The exported `prisma` is an *extended* client that adds pre-query
- * logging and automatic retry around every model operation.
+ * logging around every model operation.
+ *
+ * IMPORTANT — retry is intentionally NOT inside $allOperations:
+ * In Prisma v6, the `query` callback passed to $allOperations is a
+ * single-invocation handle. Calling it more than once does not trigger
+ * connection-pool healing — it hammers the same failed pool state,
+ * cascades timeouts across all concurrent queries, and makes Atlas
+ * outages significantly worse. Use `withRetry` explicitly at the call
+ * site for operations that genuinely benefit from retry (reads only).
  */
 
 const globalForPrisma = globalThis as unknown as {
@@ -57,7 +65,6 @@ export function classifyDbError(error: unknown): DbErrorKind {
     msg.includes("server selection timeout") ||
     msg.includes("no available servers") ||
     msg.includes("replicasetnoprimary") ||
-    // "replicaset" alone is broad enough to cover topology messages
     (msg.includes("replicaset") && msg.includes("timeout"))
   ) {
     return "server-selection-timeout";
@@ -135,18 +142,33 @@ export function databaseFailureSummary(error: unknown): string {
 
 // ── Retry wrapper ─────────────────────────────────────────────────────────────
 
-/** Error kinds that are worth retrying (transient topology / network blips). */
-const RETRIABLE: DbErrorKind[] = ["server-selection-timeout", "network-timeout"];
+/**
+ * Only server-selection-timeout is retried.
+ *
+ * network-timeout is intentionally excluded: if a write was sent and the
+ * acknowledgement timed out, retrying a create/upsert can produce duplicate
+ * documents. Call-site callers are responsible for deciding whether their
+ * operation is safe to retry on network-timeout.
+ */
+const RETRIABLE: DbErrorKind[] = ["server-selection-timeout"];
 
-/** Back-off delays (ms) between attempts 1→2, 2→3, and 3→4. */
+/** Back-off delays (ms) between attempts 1→2, 2→3, 3→4. */
 const RETRY_DELAYS_MS = [500, 1500, 3000] as const;
 
 /**
- * Run `fn` and, on retriable MongoDB errors, wait then retry up to
+ * Run `fn` and, on server-selection-timeout, wait and retry up to
  * `RETRY_DELAYS_MS.length` additional times before giving up.
  *
- * @param fn    - Async function to attempt. Receives the 1-based attempt number.
- * @param label - Short description for log lines (e.g. "Product.findMany").
+ * Use this ONLY for read operations (count, findMany, findFirst, aggregate,
+ * groupBy) or idempotent writes (upsert with a stable unique key). Never
+ * wrap a plain create/delete without understanding the duplication risk.
+ *
+ * Do NOT use this inside a Prisma $extends query extension — the `query`
+ * callback in $allOperations is a single-invocation handle and must not be
+ * called more than once.
+ *
+ * @param fn    Async function to attempt. Receives the 1-based attempt number.
+ * @param label Short description for log lines (e.g. "Product.findMany").
  */
 export async function withRetry<T>(
   fn: (attempt: number) => Promise<T>,
@@ -191,45 +213,39 @@ const _base: PrismaClient =
 // Persist on globalThis so hot-reload does not create a second connection pool.
 globalForPrisma.prisma = _base;
 
-// ── Extended client: pre-query logging + automatic retry ──────────────────────
+// ── Extended client: pre-query logging ───────────────────────────────────────
 
 /**
  * Use this everywhere instead of constructing a new PrismaClient.
  *
  * Every model operation is wrapped with:
- *   1. A log line before the query fires  (visibility into connection state)
+ *   1. A log line before the query fires — visibility into when each
+ *      operation starts so intermittent Atlas outages are immediately visible
  *   2. Elapsed-time logging on success
  *   3. Classified error logging on failure
- *   4. Automatic retry (up to 3 extra attempts) for transient Atlas outages
+ *
+ * Retry is NOT embedded here. See `withRetry` for explicit retry at the
+ * call site on read operations.
  */
 export const prisma = _base.$extends({
   query: {
     $allModels: {
       async $allOperations({ model, operation, args, query }) {
         const label = `${model}.${operation}`;
-
-        return withRetry(async (attempt) => {
-          const start = Date.now();
-
-          if (attempt === 1) {
-            console.log(`[DB] ${label} — starting`);
-          } else {
-            console.log(`[DB] ${label} — attempt ${attempt}`);
-          }
-
-          try {
-            const result = await query(args);
-            console.log(`[DB] ${label} — ok (${Date.now() - start}ms)`);
-            return result;
-          } catch (err) {
-            const kind = classifyDbError(err);
-            console.error(
-              `[DB] ${label} — failed after ${Date.now() - start}ms ` +
-                `[${kind}]: ${describeDbError(err)}`,
-            );
-            throw err;
-          }
-        }, label);
+        const start = Date.now();
+        console.log(`[DB] ${label} — starting`);
+        try {
+          const result = await query(args);
+          console.log(`[DB] ${label} — ok (${Date.now() - start}ms)`);
+          return result;
+        } catch (err) {
+          const kind = classifyDbError(err);
+          console.error(
+            `[DB] ${label} — failed after ${Date.now() - start}ms ` +
+              `[${kind}]: ${describeDbError(err)}`,
+          );
+          throw err;
+        }
       },
     },
   },

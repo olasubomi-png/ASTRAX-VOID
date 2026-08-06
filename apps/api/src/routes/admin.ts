@@ -1,8 +1,7 @@
 import { Router } from "express";
 import { requireAuth, requireAdmin, AuthRequest } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
-import { prisma } from "../lib/prisma.js";
-import { databaseFailureSummary, isDatabaseUnavailable } from "../lib/prisma.js";
+import { databaseFailureSummary, prisma } from "../lib/prisma.js";
 import { logActivity } from "../lib/activity.js";
 import fs from "fs";
 import path from "path";
@@ -10,14 +9,27 @@ const router = Router();
 
 router.use(requireAuth, requireAdmin);
 
-function valueOr<T>(
-  result: PromiseSettledResult<T>,
-  fallback: T,
+type GameGroup = { gameSlug: string | null };
+type TopDownload = {
+  productName: string | null;
+  _count: { productName: number };
+};
+
+async function runStatsQuery<T>(
   label: string,
-): T {
-  if (result.status === "fulfilled") return result.value;
-  console.warn(`[admin/stats] ${label} unavailable: ${databaseFailureSummary(result.reason)}`);
-  return fallback;
+  operation: () => Promise<T>,
+  fallback: T,
+  errors: Record<string, string>,
+): Promise<T> {
+  console.log(`[admin/stats] query ${label} — starting`);
+  try {
+    return await operation();
+  } catch (error) {
+    const summary = databaseFailureSummary(error);
+    errors[label] = summary;
+    console.error(`[admin/stats] query ${label} failed: ${summary}`);
+    return fallback;
+  }
 }
 
 // ── Dashboard stats (live DB only — no demo data) ───────────────────────────
@@ -25,6 +37,7 @@ router.get("/stats", async (_req, res, next) => {
   const statsStart = Date.now();
   console.log("[admin/stats] request received — starting DB queries");
   try {
+    const queryErrors: Record<string, string> = {};
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const startOfWeek = new Date();
@@ -33,134 +46,131 @@ router.get("/stats", async (_req, res, next) => {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    // Batch 1: 14 queries in parallel. allSettled ensures a single failing
-    // query never crashes the endpoint — valueOr() substitutes safe defaults.
-    console.log("[admin/stats] batch 1 — firing 14 queries");
-    const BATCH1_LABELS = [
+    // Batch 1: run sequentially so a server-selection timeout does not fan out
+    // across a large set of queries. Each query returns a safe partial value.
+    console.log("[admin/stats] batch 1 — running 14 queries sequentially");
+    const products = await runStatsQuery(
       "product.count(all)",
-      "product.count(active)",
-      "user.count(all)",
-      "user.count(admin)",
-      "category.count(all)",
-      "downloadLog.count(all)",
-      "downloadLog.count(today)",
-      "downloadLog.count(week)",
-      "downloadLog.count(month)",
-      "product.count(android)",
-      "product.count(ios)",
-      "user.findFirst(latest)",
-      "product.findFirst(latest)",
-      "activityLog.findMany(recent)",
-    ];
-    const initialResults = await Promise.allSettled([
-      prisma.product.count(),
-      prisma.product.count({ where: { isActive: true } }),
-      prisma.user.count(),
-      prisma.user.count({ where: { role: "ADMIN" } }),
-      prisma.category.count(),
-      prisma.downloadLog.count(),
-      prisma.downloadLog.count({ where: { createdAt: { gte: startOfDay } } }),
-      prisma.downloadLog.count({ where: { createdAt: { gte: startOfWeek } } }),
-      prisma.downloadLog.count({ where: { createdAt: { gte: startOfMonth } } }),
-      prisma.product.count({
-        where: { category: { slug: "android-resources" }, isActive: true },
-      }),
-      prisma.product.count({
-        where: { category: { slug: "ios-resources" }, isActive: true },
-      }),
-      prisma.user.findFirst({
-        orderBy: { createdAt: "desc" },
-        select: { id: true, username: true, email: true, createdAt: true },
-      }),
-      prisma.product.findFirst({
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          gameSlug: true,
-          createdAt: true,
-          category: { select: { slug: true, name: true } },
-        },
-      }),
-      prisma.activityLog.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 20,
-      }),
-    ]);
-
-    const batch1Ok = initialResults.filter((r) => r.status === "fulfilled").length;
-    const batch1Fail = initialResults.length - batch1Ok;
-    console.log(
-      `[admin/stats] batch 1 done — ${batch1Ok}/${initialResults.length} ok, ` +
-        `${batch1Fail} failed (${Date.now() - statsStart}ms elapsed)`,
+      () => prisma.product.count(),
+      0,
+      queryErrors,
     );
-    initialResults.forEach((r, i) => {
-      if (r.status === "rejected") {
-        console.error(
-          `[admin/stats] batch 1[${i}] ${BATCH1_LABELS[i]} failed: ${databaseFailureSummary(r.reason)}`,
-        );
-      }
-    });
-
-    if (initialResults.every((result) => result.status === "rejected")) {
-      const firstFailure = initialResults.find(
-        (result): result is PromiseRejectedResult => result.status === "rejected",
-      );
-      if (firstFailure && isDatabaseUnavailable(firstFailure.reason)) {
-        console.error("[admin/stats] all batch 1 queries failed — returning 503");
-        res.status(503).json({ success: false, error: "Database unavailable" });
-        return;
-      }
-    }
-
-    const [
-      products,
-      productsActive,
-      users,
-      admins,
-      categories,
-      downloads,
-      downloadsToday,
-      downloadsWeek,
-      downloadsMonth,
-      androidProducts,
-      iosProducts,
-      latestUser,
-      latestProduct,
-      recentActivity,
-    ] = [
-      valueOr(initialResults[0], 0, "products"),
-      valueOr(initialResults[1], 0, "active products"),
-      valueOr(initialResults[2], 0, "users"),
-      valueOr(initialResults[3], 0, "admins"),
-      valueOr(initialResults[4], 0, "categories"),
-      valueOr(initialResults[5], 0, "downloads"),
-      valueOr(initialResults[6], 0, "downloads today"),
-      valueOr(initialResults[7], 0, "downloads this week"),
-      valueOr(initialResults[8], 0, "downloads this month"),
-      valueOr(initialResults[9], 0, "Android products"),
-      valueOr(initialResults[10], 0, "iOS products"),
-      valueOr(initialResults[11], null, "latest user"),
-      valueOr(initialResults[12], null, "latest product"),
-      valueOr(initialResults[13], [], "recent activity"),
-    ];
+    const productsActive = await runStatsQuery(
+      "product.count(active)",
+      () => prisma.product.count({ where: { isActive: true } }),
+      0,
+      queryErrors,
+    );
+    const users = await runStatsQuery("user.count(all)", () => prisma.user.count(), 0, queryErrors);
+    const admins = await runStatsQuery(
+      "user.count(admin)",
+      () => prisma.user.count({ where: { role: "ADMIN" } }),
+      0,
+      queryErrors,
+    );
+    const categories = await runStatsQuery(
+      "category.count(all)",
+      () => prisma.category.count(),
+      0,
+      queryErrors,
+    );
+    const downloads = await runStatsQuery(
+      "downloadLog.count(all)",
+      () => prisma.downloadLog.count(),
+      0,
+      queryErrors,
+    );
+    const downloadsToday = await runStatsQuery(
+      "downloadLog.count(today)",
+      () => prisma.downloadLog.count({ where: { createdAt: { gte: startOfDay } } }),
+      0,
+      queryErrors,
+    );
+    const downloadsWeek = await runStatsQuery(
+      "downloadLog.count(week)",
+      () => prisma.downloadLog.count({ where: { createdAt: { gte: startOfWeek } } }),
+      0,
+      queryErrors,
+    );
+    const downloadsMonth = await runStatsQuery(
+      "downloadLog.count(month)",
+      () => prisma.downloadLog.count({ where: { createdAt: { gte: startOfMonth } } }),
+      0,
+      queryErrors,
+    );
+    const androidProducts = await runStatsQuery(
+      "product.count(android)",
+      () =>
+        prisma.product.count({
+          where: { category: { slug: "android-resources" }, isActive: true },
+        }),
+      0,
+      queryErrors,
+    );
+    const iosProducts = await runStatsQuery(
+      "product.count(ios)",
+      () =>
+        prisma.product.count({
+          where: { category: { slug: "ios-resources" }, isActive: true },
+        }),
+      0,
+      queryErrors,
+    );
+    const latestUser = await runStatsQuery(
+      "user.findFirst(latest)",
+      () =>
+        prisma.user.findFirst({
+          orderBy: { createdAt: "desc" },
+          select: { id: true, username: true, email: true, createdAt: true },
+        }),
+      null,
+      queryErrors,
+    );
+    const latestProduct = await runStatsQuery(
+      "product.findFirst(latest)",
+      () =>
+        prisma.product.findFirst({
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            gameSlug: true,
+            createdAt: true,
+            category: { select: { slug: true, name: true } },
+          },
+        }),
+      null,
+      queryErrors,
+    );
+    const recentActivity = await runStatsQuery(
+      "activityLog.findMany(recent)",
+      () =>
+        prisma.activityLog.findMany({
+          orderBy: { createdAt: "desc" },
+          take: 20,
+        }),
+      [],
+      queryErrors,
+    );
+    console.log(
+      `[admin/stats] batch 1 done — ${14 - Object.keys(queryErrors).length}/14 ok, ` +
+        `${Object.keys(queryErrors).length} failed (${Date.now() - statsStart}ms elapsed)`,
+    );
 
     // Batch 2: game groups
     console.log("[admin/stats] batch 2 — product.groupBy(gameSlug)");
-    const [gameGroupsResult] = await Promise.allSettled([
-      prisma.product.groupBy({
-        by: ["gameSlug"],
-        where: { gameSlug: { not: null } },
-        _count: true,
-      }),
-    ]);
-    if (gameGroupsResult.status === "rejected") {
-      console.error(
-        `[admin/stats] batch 2 product.groupBy failed: ${databaseFailureSummary(gameGroupsResult.reason)}`,
-      );
-    }
-    const gameGroups = valueOr(gameGroupsResult, [], "game groups");
+    const gameGroups = await runStatsQuery<GameGroup[]>(
+      "product.groupBy(gameSlug)",
+      () =>
+        prisma.product.groupBy({
+          by: ["gameSlug"],
+          where: { gameSlug: { not: null } },
+          _count: true,
+        }),
+      [],
+      queryErrors,
+    );
     const games = gameGroups.filter((g) => g.gameSlug).length;
 
     // Storage from uploads directory
@@ -194,21 +204,19 @@ router.get("/stats", async (_req, res, next) => {
 
     // Batch 3: top downloaded product
     console.log("[admin/stats] batch 3 — downloadLog.groupBy(productName)");
-    const [topDownloadsResult] = await Promise.allSettled([
-      prisma.downloadLog.groupBy({
-        by: ["productName"],
-        where: { productName: { not: null } },
-        _count: { productName: true },
-        orderBy: { _count: { productName: "desc" } },
-        take: 1,
-      }),
-    ]);
-    if (topDownloadsResult.status === "rejected") {
-      console.error(
-        `[admin/stats] batch 3 downloadLog.groupBy failed: ${databaseFailureSummary(topDownloadsResult.reason)}`,
-      );
-    }
-    const topDownloads = valueOr(topDownloadsResult, [], "top downloads");
+    const topDownloads = await runStatsQuery<TopDownload[]>(
+      "downloadLog.groupBy(productName)",
+      () =>
+        prisma.downloadLog.groupBy({
+          by: ["productName"],
+          where: { productName: { not: null } },
+          _count: { productName: true },
+          orderBy: { _count: { productName: "desc" } },
+          take: 1,
+        }),
+      [],
+      queryErrors,
+    );
     const mostDownloaded = topDownloads[0]
       ? {
           name: topDownloads[0].productName,
@@ -216,7 +224,7 @@ router.get("/stats", async (_req, res, next) => {
         }
       : null;
 
-    // Batch 4: downloads per day (last 7 days — 7 queries in parallel)
+    // Batch 4: downloads per day (last 7 days — sequential to limit DB load)
     console.log("[admin/stats] batch 4 — 7× downloadLog.count(per-day)");
     const downloadsPerDay: { date: string; count: number }[] = [];
     const downloadDays = Array.from({ length: 7 }, (_, index) => {
@@ -227,44 +235,39 @@ router.get("/stats", async (_req, res, next) => {
       next.setDate(next.getDate() + 1);
       return { d, next };
     });
-    const downloadDayResults = await Promise.allSettled(
-      downloadDays.map(({ d, next }) =>
-        prisma.downloadLog.count({ where: { createdAt: { gte: d, lt: next } } }),
-      ),
-    );
-    downloadDays.forEach(({ d }, index) => {
-      const count = valueOr(
-        downloadDayResults[index],
+    for (const { d, next } of downloadDays) {
+      const date = d.toISOString().slice(0, 10);
+      const count = await runStatsQuery(
+        `downloadLog.count(${date})`,
+        () => prisma.downloadLog.count({ where: { createdAt: { gte: d, lt: next } } }),
         0,
-        `downloads for ${d.toISOString().slice(0, 10)}`,
+        queryErrors,
       );
-      downloadsPerDay.push({ date: d.toISOString().slice(0, 10), count });
-    });
+      downloadsPerDay.push({ date, count });
+    }
 
     // Batch 5: new users today / this week
     console.log("[admin/stats] batch 5 — 2× user.count(time-range)");
-    const [usersTodayResult, usersWeekResult] = await Promise.allSettled([
-      prisma.user.count({ where: { createdAt: { gte: startOfDay } } }),
-      prisma.user.count({ where: { createdAt: { gte: startOfWeek } } }),
-    ]);
-    if (usersTodayResult.status === "rejected") {
-      console.error(
-        `[admin/stats] batch 5 user.count(today) failed: ${databaseFailureSummary(usersTodayResult.reason)}`,
-      );
-    }
-    if (usersWeekResult.status === "rejected") {
-      console.error(
-        `[admin/stats] batch 5 user.count(week) failed: ${databaseFailureSummary(usersWeekResult.reason)}`,
-      );
-    }
-    const usersToday = valueOr(usersTodayResult, 0, "users today");
-    const usersWeek = valueOr(usersWeekResult, 0, "users this week");
+    const usersToday = await runStatsQuery(
+      "user.count(today)",
+      () => prisma.user.count({ where: { createdAt: { gte: startOfDay } } }),
+      0,
+      queryErrors,
+    );
+    const usersWeek = await runStatsQuery(
+      "user.count(week)",
+      () => prisma.user.count({ where: { createdAt: { gte: startOfWeek } } }),
+      0,
+      queryErrors,
+    );
 
     console.log(
       `[admin/stats] all batches complete — responding (${Date.now() - statsStart}ms total)`,
     );
     res.json({
       success: true,
+      partial: Object.keys(queryErrors).length > 0,
+      errors: queryErrors,
       stats: {
         products,
         productsActive,

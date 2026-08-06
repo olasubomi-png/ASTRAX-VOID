@@ -41,6 +41,9 @@ const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000")
 
 // Always permit known production frontend hosts even if env is stale
 const BUILTIN_ORIGINS = [
+  "http://54.167.96.219",
+  "https://astraxvoid.com",
+  "https://www.astraxvoid.com",
   "https://astrax-void-web-upz5.vercel.app",
   "http://localhost:3000",
   "http://localhost:5000",
@@ -222,7 +225,8 @@ async function start() {
     console.log(`  DATABASE_URL    : ✓ Loaded`);
     console.log(`  JWT_SECRET      : ${process.env.JWT_SECRET ? "✓ Loaded" : "✗ MISSING"}`);
     console.log(`  CORS_ORIGIN     : ${process.env.CORS_ORIGIN ? "✓ Loaded" : "✗ MISSING"}`);
-    console.log(`  Allowed origins : ${allowedOrigins.join(", ") || "(none)"}`);
+    console.log(`  Allowed origins :`);
+    [...corsAllowlist].forEach((o) => console.log(`    • ${o}`));
     console.log("══════════════════════════════════════════════");
     console.log(`🚀 API listening on http://0.0.0.0:${PORT}`);
     console.log("");

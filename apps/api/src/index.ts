@@ -4,7 +4,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import "./config/env.js";
 
-import { prisma } from "./lib/prisma.js";
+import { prisma, classifyDbError, describeDbError } from "./lib/prisma.js";
 import { authRoutes } from "./routes/auth.js";
 import { productRoutes } from "./routes/products.js";
 import { orderRoutes } from "./routes/orders.js";
@@ -168,18 +168,27 @@ app.get("/health", (_req, res) => {
 });
 
 app.get("/health/db", async (_req, res) => {
+  const start = Date.now();
   try {
+    // Use a real Prisma query (ping) so the full driver stack is exercised.
     await prisma.$runCommandRaw({ ping: 1 });
+    const latencyMs = Date.now() - start;
     res.json({
       status: "ok",
       database: "connected",
+      latencyMs,
     });
-  } catch {
-    console.error("✗ Database health check failed: MongoDB unavailable");
+  } catch (err) {
+    const latencyMs = Date.now() - start;
+    const kind = classifyDbError(err);
+    const detail = describeDbError(err);
+    console.error(`✗ Database health check failed [${kind}] (${latencyMs}ms): ${detail}`);
     res.status(503).json({
       status: "error",
       database: "unavailable",
-      error: "Database unavailable",
+      errorKind: kind,
+      detail,
+      latencyMs,
     });
   }
 });
